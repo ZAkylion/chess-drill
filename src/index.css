@@ -1,0 +1,120 @@
+:root {
+  --primary-blue: #0A74DA;
+  --hover-blue: #085BAb;
+  --light-blue: #EBF4FC;
+  --white: #FFFFFF;
+  --text-dark: #1F2937;
+  --text-light: #6B7280;
+  --shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(10, 116, 218, 0.15);
+  --radius: 12px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #F0F4F8 0%, #E2ECF6 100%);
+  font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: var(--text-dark);
+}
+
+/* Általános modern kártya stílus */
+.card {
+  background: var(--white);
+  border-radius: var(--radius);
+  padding: 30px;
+  box-shadow: var(--shadow-md);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* Gombok alapstílusa */
+.btn-primary {
+  background: var(--primary-blue);
+  color: var(--white);
+  border: none;
+  padding: 12px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-primary:hover {
+  background: var(--hover-blue);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(10, 116, 218, 0.3);
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--primary-blue);
+  border: 2px solid var(--primary-blue);
+  padding: 10px 22px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-outline:hover {
+  background: var(--light-blue);
+}
+
+/* Beviteli mezők */
+.input-field {
+  width: 100%;
+  padding: 12px 15px;
+  font-size: 15px;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
+  background-color: #F9FAFB;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: var(--primary-blue);
+  box-shadow: 0 0 0 3px rgba(10, 116, 218, 0.1);
+}
+
+h1, h2, h3 {
+  color: var(--text-dark);
+}
+
+/* A böngésző alapértelmezett húzásának letiltása a sakkbábuknál */
+img {
+  -webkit-user-drag: none;
+  -khtml-user-drag: none;
+  -moz-user-drag: none;
+  -o-user-drag: none;
+  user-drag: none;
+  user-select: none;
+}
+
+/* A tábla körüli kék fókusz-keret eltüntetése */
+div[data-board] {
+  outline: none !important;
+}
+
+/* MOBIL RESZPONZIVITÁS */
+@media (max-width: 600px) {
+  .card { 
+    padding: 15px; 
+    margin: 10px;
+  }
+  
+  /* A Chessboard konténerek méretezése kisebb kijelzőkre */
+  div[style*="width: 500px"], 
+  div[style*="width: 440px"] {
+    width: 95vw !important;
+    height: 95vw !important; /* A tábla négyzet alakú maradjon */
+  }
+}
