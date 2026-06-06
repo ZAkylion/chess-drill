@@ -3,23 +3,29 @@ import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { supabase } from './supabaseClient';
 import DrillList from './DrillList';
-// Importáld a konfigurációt
 import { boardThemes, getCustomPieces } from './chessConfig';
 
-export default function DrillEditor({ onBack, session, isAdmin, settings }) { // settings prop hozzáadva
+export default function DrillEditor({ onBack, session, isAdmin, settings }) {
   const [game, setGame] = useState(new Chess());
   const [editKategoria, setEditKategoria] = useState('Általános');
   const [editLepesek, setEditLepesek] = useState([]);
   const [drillLista, setDrillLista] = useState([]);
   const [editingDrillNev, setEditingDrillNev] = useState(null);
-
   const [lépésIndex, setLépésIndex] = useState(0);
   const [history, setHistory] = useState([{ fen: new Chess().fen(), lastMove: null }]);
 
-  // Optimalizált stílusok és bábuk
-  const customPieces = useMemo(() => getCustomPieces(settings.pieceStyle), [settings.pieceStyle]);
-  const darkSquareStyle = { backgroundColor: boardThemes[settings.boardTheme]?.dark };
-  const lightSquareStyle = { backgroundColor: boardThemes[settings.boardTheme]?.light };
+  const customPieces = useMemo(() => getCustomPieces(settings?.pieceStyle), [settings?.pieceStyle]);
+
+  const editorArrows = useMemo(() => {
+    if (lépésIndex < editLepesek.length) {
+      const tempChess = new Chess(game.fen());
+      try {
+        const m = tempChess.move(editLepesek[lépésIndex]);
+        return m ? [[m.from, m.to]] : [];
+      } catch (e) { return []; }
+    }
+    return [];
+  }, [lépésIndex, editLepesek, game.fen()]);
 
   useEffect(() => { fetchList(); }, [session, isAdmin]);
 
@@ -43,10 +49,8 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) { //
   function startEditing(drill) {
     setEditingDrillNev(drill.nev);
     setEditKategoria(drill.kategoria);
-    
     const moves = drill.lepesek.split(',');
     setEditLepesek(moves);
-
     const tempGame = new Chess();
     const newHistory = [{ fen: tempGame.fen(), lastMove: null }];
     moves.forEach(m => {
@@ -81,60 +85,85 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) { //
     return !!move;
   }
 
-  const editorArrows = useMemo(() => {
-    if (lépésIndex < editLepesek.length) {
-      const tempChess = new Chess(game.fen());
-      try {
-        const m = tempChess.move(editLepesek[lépésIndex]);
-        return m ? [[m.from, m.to]] : [];
-      } catch (e) { return []; }
-    }
-    return [];
-  }, [lépésIndex, editLepesek, game.fen()]);
+  async function saveDrill() {
+    const { data: letezoMappa } = await supabase
+      .from('mappak')
+      .select('allapot')
+      .eq('nev', editKategoria)
+      .single();
+      
+    const mappaAllapot = letezoMappa ? letezoMappa.allapot : 'publikus';
+
+    await supabase.from('mappak').upsert({ 
+      nev: editKategoria, 
+      allapot: mappaAllapot, 
+      user_id: session.user.id 
+    }, { onConflict: 'nev', ignoreDuplicates: true });
+    
+    // Kinyerjük a felhasználó nevét (vagy az email címe elejét, ha nincs megadva felhasználónév)
+    const userName = session?.user?.user_metadata?.username || session?.user?.email?.split('@')[0] || 'Felhasználó';
+
+    const payload = { 
+      nev: editingDrillNev || `${editKategoria}-${Date.now()}`, 
+      kategoria: editKategoria, 
+      lepesek: editLepesek.join(','), 
+      user_id: session.user.id,
+      allapot: mappaAllapot,
+      szerzo_nev: userName // <--- EZT ADTUK HOZZÁ A MENTÉSHEZ
+    };
+    
+    if (editingDrillNev) await supabase.from('variaciok').update(payload).eq('nev', editingDrillNev);
+    else await supabase.from('variaciok').insert([payload]);
+    
+    fetchList(); 
+    resetEditor();
+  }
 
   return (
-    <div style={{ width: '500px', margin: '40px auto', textAlign: 'center', fontFamily: 'sans-serif' }}>
-      <button onClick={onBack} style={{ marginBottom: '20px', cursor: 'pointer' }}>⬅️ Vissza a főmenübe</button>
+    <div className="center-container">
+      <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '20px' }}>
+        <button className="btn-outline" onClick={onBack}>⬅️ Vissza a főmenübe</button>
+      </div>
       
-      <div style={{ background: '#fff', padding: '20px', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+      <div className="card">
         <h2>{editingDrillNev ? `✏️ Szerkesztés` : '➕ Új variáció'}</h2>
         
         <input 
-            style={{ width: '100%', padding: '10px', marginBottom: '20px', boxSizing: 'border-box' }} 
-            placeholder="Mappa neve" 
-            value={editKategoria} 
-            onChange={(e) => setEditKategoria(e.target.value)} 
+          className="input-field" 
+          placeholder="Mappa neve" 
+          value={editKategoria} 
+          onChange={(e) => setEditKategoria(e.target.value)} 
+          style={{ marginBottom: '20px' }}
         />
         
-        <div style={{ width: '440px', margin: '0 auto' }}>
+        <div style={{ maxWidth: '440px', margin: '0 auto' }}>
           <Chessboard 
             position={game.fen()} 
             onPieceDrop={onDrop} 
             customArrows={editorArrows} 
             customArrowColor="rgba(76, 175, 80, 0.8)" 
-            // Itt alkalmazzuk az új stílusokat:
-            customDarkSquareStyle={darkSquareStyle}
-            customLightSquareStyle={lightSquareStyle}
             customPieces={customPieces}
           />
         </div>
 
         <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
-          <button onClick={handlePrev}>◀️</button>
-          <button onClick={handleNext}>▶️</button>
-          <button style={{ background: '#4caf50', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '5px', cursor: 'pointer' }} onClick={async () => {
-              await supabase.from('mappak').upsert({ nev: editKategoria, allapot: 'privat', user_id: session.user.id }, { onConflict: 'nev', ignoreDuplicates: true });
-              
-              const payload = { nev: editingDrillNev || `${editKategoria}-${Date.now()}`, kategoria: editKategoria, lepesek: editLepesek.join(','), user_id: session.user.id };
-              if (editingDrillNev) await supabase.from('variaciok').update(payload).eq('nev', editingDrillNev);
-              else await supabase.from('variaciok').insert([payload]);
-              
-              fetchList(); resetEditor();
-          }}>Mentés</button>
+          <button className="btn-outline" onClick={handlePrev}>◀️</button>
+          <button className="btn-outline" onClick={handleNext}>▶️</button>
+          <button className="btn-primary" onClick={saveDrill}>Mentés</button>
         </div>
       </div>
       
-      <DrillList drillLista={drillLista} onEdit={startEditing} onDelete={async (nev) => { if(window.confirm('Törlés?')) { await supabase.from('variaciok').delete().eq('nev', nev); fetchList(); } }} isAdmin={isAdmin} />
+      <DrillList 
+        drillLista={drillLista} 
+        onEdit={startEditing} 
+        onDelete={async (nev) => { 
+          if(window.confirm('Biztosan törlöd ezt a variációt?')) { 
+            await supabase.from('variaciok').delete().eq('nev', nev); 
+            fetchList(); 
+          } 
+        }} 
+        isAdmin={isAdmin} 
+      />
     </div>
   );
 }

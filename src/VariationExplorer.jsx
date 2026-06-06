@@ -1,92 +1,146 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Chessboard } from 'react-chessboard';
 import { Chess } from 'chess.js';
+import { supabase } from './supabaseClient';
 import { boardThemes, getCustomPieces } from './chessConfig';
 
-export default function VariationExplorer({ publicCourses = [], onBack, settings }) {
+const getBaseFen = (fenString) => fenString.split(' ').slice(0, 4).join(' ');
+
+export default function VariationExplorer({ onBack, settings }) {
+  const [courses, setCourses] = useState([]); 
   const [game, setGame] = useState(new Chess());
   const [fen, setFen] = useState(game.fen());
   const [activeMove, setActiveMove] = useState(null);
   
+  // ÚJ ÁLLAPOTOK A NAVIGÁCIÓHOZ
+  const [moveHistory, setMoveHistory] = useState([]);
+  const [moveIndex, setMoveIndex] = useState(0);
+
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
-  
   const [arrows, setArrows] = useState([]);
 
   const customPieces = useMemo(() => getCustomPieces(settings?.pieceStyle), [settings?.pieceStyle]);
   const darkSquareStyle = { backgroundColor: boardThemes[settings?.boardTheme || 'blue']?.dark };
   const lightSquareStyle = { backgroundColor: boardThemes[settings?.boardTheme || 'blue']?.light };
 
+  useEffect(() => {
+    async function fetchAllCourses() {
+      const { data } = await supabase.from('variaciok').select('*');
+      if (data) {
+        const grouped = data.reduce((acc, drill) => {
+          if (!acc[drill.kategoria]) {
+            acc[drill.kategoria] = { id: drill.kategoria, cim: drill.kategoria, drills: [] };
+          }
+          acc[drill.kategoria].drills.push(drill);
+          return acc;
+        }, {});
+        setCourses(Object.values(grouped));
+      }
+    }
+    fetchAllCourses();
+  }, []);
+
+  // SEGÉDFÜGGVÉNY: Újraépíti a táblát egy adott lépéslistából
+  const rebuildGame = useCallback((moves) => {
+    const newGame = new Chess();
+    for (const m of moves) {
+      try { newGame.move(m); } catch(e) {}
+    }
+    setGame(newGame);
+    setFen(newGame.fen());
+  }, []);
+
+  // VISSZA LÉPÉS
+  const handlePrev = useCallback(() => {
+    if (moveIndex > 0) {
+      const newIdx = moveIndex - 1;
+      setMoveIndex(newIdx);
+      rebuildGame(moveHistory.slice(0, newIdx));
+      setActiveMove(null);
+    }
+  }, [moveIndex, moveHistory, rebuildGame]);
+
+  // ELŐRE LÉPÉS
+  const handleNext = useCallback(() => {
+    if (moveIndex < moveHistory.length) {
+      const newIdx = moveIndex + 1;
+      setMoveIndex(newIdx);
+      rebuildGame(moveHistory.slice(0, newIdx));
+      setActiveMove(null);
+    }
+  }, [moveIndex, moveHistory, rebuildGame]);
+
+  // BILLENTYŰZET FIGYELŐ
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowLeft') handlePrev();
+      if (e.key === 'ArrowRight') handleNext();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handlePrev, handleNext]);
+
   // NYILAK KISZÁMÍTÁSA
   useEffect(() => {
-    // Ha nincs kiválasztva kurzus, vagy nincsenek benne drillek, töröljük a nyilakat
-    if (!selectedCourse || !selectedCourse.drills || selectedCourse.drills.length === 0) {
-      setArrows([]);
-      return;
-    }
-
-    const currentHistory = game.history(); // pl. ['e4', 'e5']
+    const currentBaseFen = getBaseFen(game.fen());
     const newArrows = [];
     const seenMoves = new Set(); 
 
-    selectedCourse.drills.forEach(drill => {
+    const drillsToCheck = selectedCourse ? selectedCourse.drills : courses.flatMap(c => c.drills);
+
+    drillsToCheck.forEach(drill => {
       if (!drill.lepesek) return;
-
-      // Szétválasztjuk a lépéseket, eltávolítjuk a szóközöket és az üres elemeket
       const drillMoves = drill.lepesek.split(',').map(m => m.trim()).filter(Boolean);
-
-      // Ellenőrizzük, hogy a jelenlegi tábla egyezik-e a variáció eddigi lépéseivel
-      let isMatch = true;
-      for (let i = 0; i < currentHistory.length; i++) {
-        if (drillMoves[i] !== currentHistory[i]) {
-          isMatch = false;
-          break;
-        }
-      }
-
-      // Ha egyezik, és a variációnak van még következő lépése
-      if (isMatch && drillMoves.length > currentHistory.length) {
-        const nextSan = drillMoves[currentHistory.length]; // A következő lépés SAN formátumban (pl. 'Nf3')
-
+      const tempBoard = new Chess(); 
+      
+      if (getBaseFen(tempBoard.fen()) === currentBaseFen && drillMoves.length > 0) {
+        const nextSan = drillMoves[0];
         if (!seenMoves.has(nextSan)) {
           seenMoves.add(nextSan);
           try {
-            // Egy átmeneti táblán kipróbáljuk a lépést, hogy megkapjuk a mezők koordinátáit
-            const temp = new Chess(game.fen());
-            const moveObj = temp.move(nextSan);
-            if (moveObj) {
-              // Hozzáadjuk a nyilat: [honnan, hova, szín]
-              newArrows.push([moveObj.from, moveObj.to, 'rgba(34, 197, 94, 0.8)']);
-            }
-          } catch (e) {
-            console.error(`Hiba a nyíl kiszámításakor (${nextSan}):`, e);
-          }
+            const testGame = new Chess(game.fen());
+            const moveObj = testGame.move(nextSan);
+            if (moveObj) newArrows.push([moveObj.from, moveObj.to, 'rgba(34, 197, 94, 0.8)']);
+          } catch(e) {}
         }
+      }
+
+      for (let i = 0; i < drillMoves.length; i++) {
+        try {
+          tempBoard.move(drillMoves[i]);
+          if (getBaseFen(tempBoard.fen()) === currentBaseFen) {
+            if (i + 1 < drillMoves.length) {
+              const nextSan = drillMoves[i + 1];
+              if (!seenMoves.has(nextSan)) {
+                seenMoves.add(nextSan);
+                const testGame = new Chess(game.fen());
+                const moveObj = testGame.move(nextSan);
+                if (moveObj) newArrows.push([moveObj.from, moveObj.to, 'rgba(34, 197, 94, 0.8)']);
+              }
+            }
+          }
+        } catch (e) { break; }
       }
     });
 
-    console.log("Jelenlegi lépéstörténet:", currentHistory);
-    console.log("Kiszámolt nyilak:", newArrows);
     setArrows(newArrows);
-
-  }, [fen, selectedCourse, game]); // Akkor fut le újra, ha a FEN, a játék vagy a kurzus megváltozik
+  }, [fen, selectedCourse, courses, game]); 
 
   function onDrop(sourceSquare, targetSquare) {
     try {
-      // 100%-ig biztonságos játékmásolás a lépéstörténet megtartásával
-      const gameCopy = new Chess();
-      game.history().forEach(m => gameCopy.move(m));
-      
-      const move = gameCopy.move({
-        from: sourceSquare,
-        to: targetSquare,
-        promotion: 'q',
-      });
+      const testGame = new Chess(game.fen());
+      const move = testGame.move({ from: sourceSquare, to: targetSquare, promotion: 'q' });
 
-      if (move === null) return false;
+      if (!move) return false;
       
-      setGame(gameCopy);
-      setFen(gameCopy.fen());
+      // Ha manuálisan lépünk, levágjuk a jövőbeli (előre léphető) előzményeket!
+      const newHistory = [...moveHistory.slice(0, moveIndex), move.san];
+      setMoveHistory(newHistory);
+      setMoveIndex(newHistory.length);
+      
+      setGame(testGame);
+      setFen(testGame.fen());
       setActiveMove(null);
       return true;
     } catch (e) {
@@ -95,49 +149,54 @@ export default function VariationExplorer({ publicCourses = [], onBack, settings
   }
 
   function playMoveSequence(lepesekString, targetIndex, drillId) {
-    const newGame = new Chess();
     const moves = lepesekString.split(',').map(m => m.trim()).filter(Boolean);
     
-    for (let i = 0; i <= targetIndex; i++) {
-      if (moves[i]) {
-        try { 
-          newGame.move(moves[i]); 
-        } 
-        catch (e) { 
-          console.error("Érvénytelen lépés a sorozatban:", moves[i]); 
-        }
-      }
-    }
-    
-    setGame(newGame);
-    setFen(newGame.fen());
+    // Betöltjük a TELJES variációt a memóriába, de a táblát csak a kattintott pontig építjük fel
+    setMoveHistory(moves);
+    setMoveIndex(targetIndex + 1);
+    rebuildGame(moves.slice(0, targetIndex + 1));
     setActiveMove(`${drillId}-${targetIndex}`);
   }
 
   function resetBoard() {
-    const newGame = new Chess();
-    setGame(newGame);
-    setFen(newGame.fen());
+    setMoveHistory([]);
+    setMoveIndex(0);
+    rebuildGame([]);
     setActiveMove(null);
   }
 
-  const filteredCourses = publicCourses.filter(c => 
-    c.cim.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredCourses = courses.filter(c => {
+    const matchesSearch = c.cim.toLowerCase().includes(searchTerm.toLowerCase());
+    if (!matchesSearch) return false;
+
+    const currentBaseFen = getBaseFen(game.fen());
+    if (currentBaseFen === getBaseFen(new Chess().fen())) return true;
+
+    return c.drills.some(drill => {
+      const tempBoard = new Chess();
+      if (getBaseFen(tempBoard.fen()) === currentBaseFen) return true;
+      
+      const moves = drill.lepesek.split(',').map(m => m.trim()).filter(Boolean);
+      for (let m of moves) {
+        try {
+          tempBoard.move(m);
+          if (getBaseFen(tempBoard.fen()) === currentBaseFen) return true;
+        } catch(e) { break; }
+      }
+      return false;
+    });
+  });
 
   return (
-    <div style={{ maxWidth: '900px', margin: '40px auto', fontFamily: 'sans-serif', padding: '0 20px' }}>
+    <div className="center-container" style={{ maxWidth: '900px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
         <button className="btn-outline" onClick={onBack}>⬅️ Főmenü</button>
-        <h2 style={{ margin: 0, color: 'var(--primary-blue)' }}>
-          🔍 Megnyitás Explorer
-        </h2>
+        <h2 style={{ margin: 0, color: 'var(--primary-blue)' }}>🔍 Megnyitás Explorer</h2>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
         
-        {/* SAKKTÁBLA */}
-        <div className="card" style={{ padding: '20px', background: 'white', borderRadius: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)' }}>
+        <div className="card" style={{ padding: '20px' }}>
           <Chessboard 
             position={fen} 
             onPieceDrop={onDrop}
@@ -148,25 +207,42 @@ export default function VariationExplorer({ publicCourses = [], onBack, settings
             animationDuration={200}
           />
           
-          <div style={{ marginTop: '20px', textAlign: 'center' }}>
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
+            <button 
+              className="btn-outline" 
+              onClick={handlePrev} 
+              disabled={moveIndex === 0}
+              style={{ padding: '10px 15px', opacity: moveIndex === 0 ? 0.5 : 1, cursor: moveIndex === 0 ? 'not-allowed' : 'pointer' }}
+            >
+              ◀️
+            </button>
+            <button 
+              className="btn-outline" 
+              onClick={handleNext} 
+              disabled={moveIndex === moveHistory.length}
+              style={{ padding: '10px 15px', opacity: moveIndex === moveHistory.length ? 0.5 : 1, cursor: moveIndex === moveHistory.length ? 'not-allowed' : 'pointer' }}
+            >
+              ▶️
+            </button>
             <button className="btn-outline" onClick={resetBoard}>
-              🔄 Tábla alaphelyzet
+              🔄 Alaphelyzet
             </button>
           </div>
         </div>
 
-        {/* MENÜ RÉSZ */}
-        <div className="card" style={{ padding: '20px', background: 'white', borderRadius: '8px', boxShadow: '0 2px 10px rgba(0,0,0,0.1)', height: '540px', display: 'flex', flexDirection: 'column' }}>
-          
+        <div className="card" style={{ height: '540px', display: 'flex', flexDirection: 'column' }}>
           {!selectedCourse ? (
             <>
-              <h3 style={{ marginTop: 0, borderBottom: '2px solid #eee', paddingBottom: '10px' }}>Publikus & Saját Megnyitások</h3>
+              <h3 style={{ marginTop: 0, borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
+                Közösségi Megnyitások {moveIndex > 0 && <span style={{ fontSize: '12px', color: 'var(--primary-blue)' }}>(Szűrve az állásra)</span>}
+              </h3>
               <input 
                 type="text" 
+                className="input-field"
                 placeholder="Keresés a megnyitások között..." 
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ padding: '10px', marginBottom: '15px', borderRadius: '4px', border: '1px solid #ccc', width: '100%', boxSizing: 'border-box' }}
+                style={{ marginBottom: '15px' }}
               />
               
               <div style={{ overflowY: 'auto', flex: 1, paddingRight: '5px' }}>
@@ -174,28 +250,24 @@ export default function VariationExplorer({ publicCourses = [], onBack, settings
                   filteredCourses.map(course => (
                     <div 
                       key={course.id} 
-                      onClick={() => { setSelectedCourse(course); resetBoard(); }}
+                      onClick={() => setSelectedCourse(course)}
                       style={{ padding: '12px', borderBottom: '1px solid #eee', cursor: 'pointer', transition: 'background 0.2s', borderRadius: '4px' }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#f0f8ff'}
+                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--light-blue)'}
                       onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                     >
                       <strong style={{ display: 'block', fontSize: '16px', color: 'var(--primary-blue)' }}>{course.cim}</strong>
-                      <span style={{ fontSize: '12px', color: '#666' }}>{course.drills?.length || 0} variáció</span>
+                      <span style={{ fontSize: '12px', color: 'var(--text-light)' }}>{course.drills?.length || 0} variáció tartalmazza</span>
                     </div>
                   ))
                 ) : (
-                  <p style={{ color: '#888', textAlign: 'center', marginTop: '20px' }}>Nincs találat.</p>
+                  <p style={{ color: 'var(--text-light)', textAlign: 'center', marginTop: '20px' }}>Ebben a pozícióban nincs ismert folytatás.</p>
                 )}
               </div>
             </>
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '15px' }}>
-                <button 
-                  className="btn-outline" 
-                  style={{ padding: '4px 8px', fontSize: '12px' }} 
-                  onClick={() => { setSelectedCourse(null); resetBoard(); }}
-                >
+                <button className="btn-outline" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setSelectedCourse(null)}>
                   🔙 Vissza
                 </button>
                 <h3 style={{ margin: 0, fontSize: '18px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -207,7 +279,7 @@ export default function VariationExplorer({ publicCourses = [], onBack, settings
                 {selectedCourse.drills && selectedCourse.drills.length > 0 ? (
                   selectedCourse.drills.map((drill, dIdx) => (
                     <div key={drill.id || dIdx} style={{ marginBottom: '25px' }}>
-                      <h4 style={{ margin: '0 0 10px 0', color: '#444' }}>{drill.nev}</h4>
+                      <h4 style={{ margin: '0 0 10px 0', color: 'var(--text-dark)' }}>{drill.nev}</h4>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
                         {drill.lepesek.split(',').map(m => m.trim()).filter(Boolean).map((move, mIdx) => {
                           const isWhite = mIdx % 2 === 0;
@@ -216,12 +288,12 @@ export default function VariationExplorer({ publicCourses = [], onBack, settings
                           
                           return (
                             <React.Fragment key={mIdx}>
-                              {isWhite && <span style={{ color: '#888', fontSize: '13px', lineHeight: '28px', marginLeft: '4px' }}>{moveNumber}.</span>}
+                              {isWhite && <span style={{ color: 'var(--text-light)', fontSize: '13px', lineHeight: '28px', marginLeft: '4px' }}>{moveNumber}.</span>}
                               <button
                                 style={{
                                   padding: '4px 8px',
                                   border: isActive ? '2px solid var(--primary-blue)' : '1px solid #ccc',
-                                  background: isActive ? '#e0f0ff' : '#f9f9f9',
+                                  background: isActive ? 'var(--light-blue)' : '#f9f9f9',
                                   borderRadius: '4px',
                                   cursor: 'pointer',
                                   fontWeight: isActive ? 'bold' : 'normal',
@@ -238,7 +310,7 @@ export default function VariationExplorer({ publicCourses = [], onBack, settings
                     </div>
                   ))
                 ) : (
-                  <p style={{ color: '#888', fontStyle: 'italic', textAlign: 'center' }}>Nincsenek elérhető variációk ebben a megnyitásban.</p>
+                  <p style={{ color: 'var(--text-light)', fontStyle: 'italic', textAlign: 'center' }}>Nincsenek elérhető variációk.</p>
                 )}
               </div>
             </>
