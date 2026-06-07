@@ -56,7 +56,7 @@ function App() {
     return <Landing onLoginClick={() => setView('auth')} />;
   }
 
-  // HA BE VAN JELENTKEZVE: Főmenü (Dashboard)
+  // HA BE VAGY JELENTKEZVE: Főmenü (Dashboard) 
   if (view === 'home') {
     return (
       <div className="center-container" style={{ maxWidth: '600px', textAlign: 'center' }}>
