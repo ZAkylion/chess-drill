@@ -24,7 +24,7 @@ function App() {
       botDelay: parsed.botDelay ?? 500,
       boardTheme: parsed.boardTheme || 'classic',
       pieceStyle: parsed.pieceStyle || 'default',
-      showCoordinates: parsed.showCoordinates ?? true
+      showCoordinates: parsed.showCoordinates ?? true,
       showLegalMoves: parsed.showLegalMoves ?? true
     };
   });
