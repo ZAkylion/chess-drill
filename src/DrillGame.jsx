@@ -11,12 +11,11 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
   const [history, setHistory] = useState([{ fen: new Chess().fen(), lastMove: null }]);
   const [isCompleted, setIsCompleted] = useState(false);
   
-  // FOKOZATOS TIPP RENDSZER
   const [hintLevel, setHintLevel] = useState(0); 
   const [hintMove, setHintMove] = useState(null);
 
-  // ÚJ: LEGÁLIS LÉPÉSEK (Pöttyök) ÁLLAPOTA
   const [optionSquares, setOptionSquares] = useState({});
+  const [moveFrom, setMoveFrom] = useState('');
 
   const [rightClickedSquares, setRightClickedSquares] = useState({});
   const [wrongMove, setWrongMove] = useState(null);
@@ -39,7 +38,8 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
   function resetHints() {
     setHintLevel(0);
     setHintMove(null);
-    setOptionSquares({}); // ÚJ: Navigáláskor eltüntetjük a pöttyöket is
+    setOptionSquares({});
+    setMoveFrom('');
   }
 
   function handlePrev() {
@@ -75,9 +75,9 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lépésIndex, history, isCompleted, wrongMove, isBotMoving]);
 
-  // --- ÚJ LOGIKA: Lépéslehetőségek (pöttyök) kiszámítása ---
+  // JAVÍTÁS 1: Ütések megjelenítése karikával
   function getMoveOptions(square) {
-    if (settings?.showLegalMoves === false) return; // Ha ki van kapcsolva, nem csinálunk semmit
+    if (settings?.showLegalMoves === false) return;
 
     const moves = game.moves({ square, verbose: true });
     if (moves.length === 0) {
@@ -87,36 +87,66 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
 
     const newSquares = {};
     moves.forEach((m) => {
-      // Megnézzük, hogy van-e a célmezőn ellenséges bábu (ütés)
       const isCapture = game.get(m.to) && game.get(m.to).color !== game.get(square).color;
-      
-      newSquares[m.to] = {
-        // Ha ütés: átlátszó közép, sötét gyűrű a szélén. Ha sima lépés: sötét pötty középen.
-        background: isCapture 
-          ? 'radial-gradient(transparent 0%, transparent 74%, rgba(0,0,0,.2) 75%)'
-          : 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)',
-        borderRadius: '50%'
-      };
+      if (isCapture) {
+        newSquares[m.to] = {
+          boxShadow: 'inset 0 0 0 6px rgba(0,0,0,.2)', // Belső árnyék csinálja a karikát
+          borderRadius: '50%'
+        };
+      } else {
+        newSquares[m.to] = {
+          background: 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)',
+          borderRadius: '50%'
+        };
+      }
     });
-    
-    // A kiválasztott bábu mezőjének enyhe kiemelése
     newSquares[square] = { background: 'rgba(255, 255, 51, 0.5)' };
     setOptionSquares(newSquares);
   }
 
+  // JAVÍTÁS 2: Drag indításakor megjegyezzük a bábut!
   function onPieceDragBegin(piece, sourceSquare) {
+    setMoveFrom(sourceSquare);
     getMoveOptions(sourceSquare);
   }
 
   function onSquareClick(square) {
     setRightClickedSquares({});
-    if (settings?.showLegalMoves === false) return;
+    if (isCompleted || wrongMove) return;
 
-    const piece = game.get(square);
-    if (piece && piece.color === game.turn()) {
-      getMoveOptions(square); // Ha a sajátjára kattint, mutatjuk a lépéseket
+    // Ha ugyanarra a bábura kattint másodszor, levesszük a kijelölést
+    if (moveFrom === square) {
+      setMoveFrom('');
+      setOptionSquares({});
+      return;
+    }
+
+    if (moveFrom) {
+      // Megnézzük, szabályos-e a kattintott lépés
+      const gameCopy = new Chess(game.fen());
+      const move = gameCopy.move({ from: moveFrom, to: square, promotion: 'q' });
+      
+      if (move) {
+        onDrop(moveFrom, square); // Ha igen, rábízzuk az onDrop-ra a végrehajtást
+        return;
+      }
+      
+      const piece = game.get(square);
+      if (piece && piece.color === game.turn()) {
+        setMoveFrom(square);
+        if (settings?.showLegalMoves !== false) getMoveOptions(square);
+      } else {
+        setMoveFrom('');
+        setOptionSquares({});
+      }
     } else {
-      setOptionSquares({}); // Ha máshova kattint, eltüntetjük
+      const piece = game.get(square);
+      if (piece && piece.color === game.turn()) {
+        setMoveFrom(square);
+        if (settings?.showLegalMoves !== false) getMoveOptions(square);
+      } else {
+        setOptionSquares({});
+      }
     }
   }
 
@@ -155,7 +185,7 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
     setHistory(updatedHistory);
     setLépésIndex(updatedHistory.length - 1);
     setRightClickedSquares({});
-    resetHints(); // Ez most már az optionSquares-t is nullázza
+    resetHints();
 
     if (updatedHistory.length - 1 >= drillLépések.length) {
       setIsCompleted(true);
@@ -167,7 +197,16 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
   }
 
   function onDrop(source, target) {
-    setOptionSquares({}); // Lépéskor (elengedéskor) eltüntetjük a pöttyöket
+    // JAVÍTÁS 2: Ha ugyanoda tette vissza a bábut, kijelölve hagyjuk!
+    if (source === target) {
+      setMoveFrom(source);
+      if (settings?.showLegalMoves !== false) getMoveOptions(source);
+      return false;
+    }
+
+    setOptionSquares({}); 
+    setMoveFrom(''); // Ha tényleg lépett, töröljük a kijelölést
+
     if (isCompleted || wrongMove) return false;
     
     if (isBotMoving) {
@@ -228,21 +267,21 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
     }
   }
 
-  // --- VIZUÁLIS STÍLUSOK ÖSSZEOLVASZTÁSA ---
   const lastMove = history[lépésIndex]?.lastMove;
   const moveSquares = lastMove ? { [lastMove.from]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' }, [lastMove.to]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
   const wrongMoveSquares = wrongMove ? { [wrongMove]: { backgroundColor: 'rgba(255, 0, 0, 0.4)' } } : {};
   const preMoveStyles = preMoveVisual ? { [preMoveVisual.source]: { backgroundColor: 'rgba(255, 255, 0, 0.6)' }, [preMoveVisual.target]: { backgroundColor: 'rgba(255, 255, 0, 0.6)' } } : {};
   const hintSquareStyle = hintLevel >= 1 && hintMove ? { [hintMove.from]: { backgroundColor: 'rgba(59, 130, 246, 0.6)' } } : {};
-  
-  // Fontos: Az optionSquares (pöttyök) is bekerült a fúzióba!
+  const clickSelectStyle = moveFrom ? { [moveFrom]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
+
   const customSquareStyles = { 
     ...moveSquares, 
     ...rightClickedSquares, 
     ...wrongMoveSquares, 
     ...preMoveStyles, 
     ...hintSquareStyle,
-    ...optionSquares 
+    ...optionSquares,
+    ...clickSelectStyle
   };
   
   const customArrows = hintLevel === 2 && hintMove ? [[hintMove.from, hintMove.to, 'rgba(59, 130, 246, 0.8)']] : [];
@@ -258,8 +297,8 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
         <Chessboard 
           position={getVisualPosition()} 
           onPieceDrop={onDrop} 
-          onPieceDragBegin={onPieceDragBegin}  // ÚJ: Drag indításakor pöttyök generálása
-          onSquareClick={onSquareClick}        // ÚJ: Kattintásra pöttyök generálása
+          onPieceDragBegin={onPieceDragBegin}
+          onSquareClick={onSquareClick}
           onSquareRightClick={onSquareRightClick}
           customSquareStyles={customSquareStyles}
           customArrows={customArrows}
@@ -277,28 +316,14 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
             className="btn-outline" 
             onClick={handlePrev} 
             disabled={lépésIndex === 0 || isBotMoving || wrongMove}
-            style={{ 
-              padding: '8px 20px', 
-              opacity: (lépésIndex === 0 || isBotMoving || wrongMove) ? 0.5 : 1, 
-              cursor: (lépésIndex === 0 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer',
-              border: '1px solid var(--primary-blue)'
-            }}
-          >
-            ◀️
-          </button>
+            style={{ padding: '8px 20px', opacity: (lépésIndex === 0 || isBotMoving || wrongMove) ? 0.5 : 1, cursor: (lépésIndex === 0 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer', border: '1px solid var(--primary-blue)' }}
+          >◀️</button>
           <button 
             className="btn-outline" 
             onClick={handleNext} 
             disabled={lépésIndex === history.length - 1 || isBotMoving || wrongMove}
-            style={{ 
-              padding: '8px 20px', 
-              opacity: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 0.5 : 1, 
-              cursor: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer',
-              border: '1px solid var(--primary-blue)'
-            }}
-          >
-            ▶️
-          </button>
+            style={{ padding: '8px 20px', opacity: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 0.5 : 1, cursor: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer', border: '1px solid var(--primary-blue)' }}
+          >▶️</button>
         </div>
       )}
       
@@ -310,7 +335,6 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
         </div>
       ) : (
         <div className="card" style={{ marginTop: '20px', padding: '15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
-          
           <p style={{ margin: 0, height: '20px', fontWeight: 'bold', color: hintLevel > 0 ? 'var(--primary-blue)' : 'transparent' }}>
             {hintLevel === 1 && '💡 Mozgasd a kiemelt bábut!'}
             {hintLevel === 2 && '🎯 Kövesd a nyilat a helyes lépéshez!'}
@@ -320,12 +344,7 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
             className="btn-outline" 
             onClick={handleHintClick}
             disabled={hintLevel === 2}
-            style={{ 
-              opacity: hintLevel === 2 ? 0.5 : 1, 
-              cursor: hintLevel === 2 ? 'not-allowed' : 'pointer',
-              borderColor: hintLevel === 1 ? '#F59E0B' : 'var(--primary-blue)',
-              color: hintLevel === 1 ? '#F59E0B' : 'var(--primary-blue)'
-            }}
+            style={{ opacity: hintLevel === 2 ? 0.5 : 1, cursor: hintLevel === 2 ? 'not-allowed' : 'pointer', borderColor: hintLevel === 1 ? '#F59E0B' : 'var(--primary-blue)', color: hintLevel === 1 ? '#F59E0B' : 'var(--primary-blue)' }}
           >
             {hintLevel === 0 ? '💡 Bábu felfedése (Tipp)' : hintLevel === 1 ? '🎯 Pontos célpont (Újabb Tipp)' : '✅ Megoldás felfedve'}
           </button>

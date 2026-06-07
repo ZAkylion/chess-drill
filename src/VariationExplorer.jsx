@@ -19,8 +19,8 @@ export default function VariationExplorer({ onBack, settings }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [arrows, setArrows] = useState([]);
 
-  // ÚJ: Legális lépések vizualizációja
   const [optionSquares, setOptionSquares] = useState({});
+  const [moveFrom, setMoveFrom] = useState('');
 
   const customPieces = useMemo(() => getCustomPieces(settings?.pieceStyle), [settings?.pieceStyle]);
   const darkSquareStyle = { backgroundColor: boardThemes[settings?.boardTheme || 'blue']?.dark };
@@ -51,6 +51,7 @@ export default function VariationExplorer({ onBack, settings }) {
     setGame(newGame);
     setFen(newGame.fen());
     setOptionSquares({});
+    setMoveFrom('');
   }, []);
 
   const handlePrev = useCallback(() => {
@@ -125,46 +126,74 @@ export default function VariationExplorer({ onBack, settings }) {
     setArrows(newArrows);
   }, [fen, selectedCourse, courses, game]); 
 
-  // --- Legális lépések számítása ---
   function getMoveOptions(square) {
     if (settings?.showLegalMoves === false) return;
-
     const moves = game.moves({ square, verbose: true });
     if (moves.length === 0) {
       setOptionSquares({});
       return;
     }
-
     const newSquares = {};
     moves.forEach((m) => {
       const isCapture = game.get(m.to) && game.get(m.to).color !== game.get(square).color;
-      newSquares[m.to] = {
-        background: isCapture 
-          ? 'radial-gradient(transparent 0%, transparent 74%, rgba(0,0,0,.2) 75%)'
-          : 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)',
-        borderRadius: '50%'
-      };
+      if (isCapture) {
+        newSquares[m.to] = { boxShadow: 'inset 0 0 0 6px rgba(0,0,0,.2)', borderRadius: '50%' };
+      } else {
+        newSquares[m.to] = { background: 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)', borderRadius: '50%' };
+      }
     });
     newSquares[square] = { background: 'rgba(255, 255, 51, 0.5)' };
     setOptionSquares(newSquares);
   }
 
   function onPieceDragBegin(piece, sourceSquare) {
+    setMoveFrom(sourceSquare);
     getMoveOptions(sourceSquare);
   }
 
   function onSquareClick(square) {
-    if (settings?.showLegalMoves === false) return;
-    const piece = game.get(square);
-    if (piece && piece.color === game.turn()) {
-      getMoveOptions(square);
-    } else {
+    if (moveFrom === square) {
+      setMoveFrom('');
       setOptionSquares({});
+      return;
+    }
+
+    if (moveFrom) {
+      const gameCopy = new Chess(game.fen());
+      const move = gameCopy.move({ from: moveFrom, to: square, promotion: 'q' });
+      if (move) {
+        onDrop(moveFrom, square);
+        return;
+      }
+      
+      const piece = game.get(square);
+      if (piece && piece.color === game.turn()) {
+        setMoveFrom(square);
+        if (settings?.showLegalMoves !== false) getMoveOptions(square);
+      } else {
+        setMoveFrom('');
+        setOptionSquares({});
+      }
+    } else {
+      const piece = game.get(square);
+      if (piece && piece.color === game.turn()) {
+        setMoveFrom(square);
+        if (settings?.showLegalMoves !== false) getMoveOptions(square);
+      } else {
+        setOptionSquares({});
+      }
     }
   }
 
   function onDrop(sourceSquare, targetSquare) {
+    if (sourceSquare === targetSquare) {
+      setMoveFrom(sourceSquare);
+      if (settings?.showLegalMoves !== false) getMoveOptions(sourceSquare);
+      return false;
+    }
+
     setOptionSquares({});
+    setMoveFrom('');
     try {
       const testGame = new Chess(game.fen());
       const move = testGame.move({ from: sourceSquare, to: targetSquare, promotion: 'q' });
@@ -198,29 +227,28 @@ export default function VariationExplorer({ onBack, settings }) {
     rebuildGame([]);
     setActiveMove(null);
     setOptionSquares({});
+    setMoveFrom('');
   }
 
   const filteredCourses = courses.filter(c => {
     const matchesSearch = c.cim.toLowerCase().includes(searchTerm.toLowerCase());
     if (!matchesSearch) return false;
-
     const currentBaseFen = getBaseFen(game.fen());
     if (currentBaseFen === getBaseFen(new Chess().fen())) return true;
 
     return c.drills.some(drill => {
       const tempBoard = new Chess();
       if (getBaseFen(tempBoard.fen()) === currentBaseFen) return true;
-      
       const moves = drill.lepesek.split(',').map(m => m.trim()).filter(Boolean);
       for (let m of moves) {
-        try {
-          tempBoard.move(m);
-          if (getBaseFen(tempBoard.fen()) === currentBaseFen) return true;
-        } catch(e) { break; }
+        try { tempBoard.move(m); if (getBaseFen(tempBoard.fen()) === currentBaseFen) return true; } catch(e) { break; }
       }
       return false;
     });
   });
+
+  const clickSelectStyle = moveFrom ? { [moveFrom]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
+  const customSquareStyles = { ...optionSquares, ...clickSelectStyle };
 
   return (
     <div className="center-container" style={{ maxWidth: '900px' }}>
@@ -242,30 +270,14 @@ export default function VariationExplorer({ onBack, settings }) {
             customPieces={customPieces} 
             customArrows={arrows} 
             showBoardNotation={settings?.showCoordinates ?? true}
-            customSquareStyles={optionSquares}
+            customSquareStyles={customSquareStyles}
             animationDuration={200}
           />
           
           <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
-            <button 
-              className="btn-outline" 
-              onClick={handlePrev} 
-              disabled={moveIndex === 0}
-              style={{ padding: '10px 15px', opacity: moveIndex === 0 ? 0.5 : 1, cursor: moveIndex === 0 ? 'not-allowed' : 'pointer' }}
-            >
-              ◀️
-            </button>
-            <button 
-              className="btn-outline" 
-              onClick={handleNext} 
-              disabled={moveIndex === moveHistory.length}
-              style={{ padding: '10px 15px', opacity: moveIndex === moveHistory.length ? 0.5 : 1, cursor: moveIndex === moveHistory.length ? 'not-allowed' : 'pointer' }}
-            >
-              ▶️
-            </button>
-            <button className="btn-outline" onClick={resetBoard}>
-              🔄 Alaphelyzet
-            </button>
+            <button className="btn-outline" onClick={handlePrev} disabled={moveIndex === 0} style={{ padding: '10px 15px', opacity: moveIndex === 0 ? 0.5 : 1, cursor: moveIndex === 0 ? 'not-allowed' : 'pointer' }}>◀️</button>
+            <button className="btn-outline" onClick={handleNext} disabled={moveIndex === moveHistory.length} style={{ padding: '10px 15px', opacity: moveIndex === moveHistory.length ? 0.5 : 1, cursor: moveIndex === moveHistory.length ? 'not-allowed' : 'pointer' }}>▶️</button>
+            <button className="btn-outline" onClick={resetBoard}>🔄 Alaphelyzet</button>
           </div>
         </div>
 
@@ -275,25 +287,12 @@ export default function VariationExplorer({ onBack, settings }) {
               <h3 style={{ marginTop: 0, borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
                 Közösségi Megnyitások {moveIndex > 0 && <span style={{ fontSize: '12px', color: 'var(--primary-blue)' }}>(Szűrve az állásra)</span>}
               </h3>
-              <input 
-                type="text" 
-                className="input-field"
-                placeholder="Keresés a megnyitások között..." 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                style={{ marginBottom: '15px' }}
-              />
+              <input type="text" className="input-field" placeholder="Keresés a megnyitások között..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ marginBottom: '15px' }} />
               
               <div style={{ overflowY: 'auto', flex: 1, paddingRight: '5px' }}>
                 {filteredCourses.length > 0 ? (
                   filteredCourses.map(course => (
-                    <div 
-                      key={course.id} 
-                      onClick={() => setSelectedCourse(course)}
-                      style={{ padding: '12px', borderBottom: '1px solid #eee', cursor: 'pointer', transition: 'background 0.2s', borderRadius: '4px' }}
-                      onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--light-blue)'}
-                      onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                    >
+                    <div key={course.id} onClick={() => setSelectedCourse(course)} style={{ padding: '12px', borderBottom: '1px solid #eee', cursor: 'pointer', transition: 'background 0.2s', borderRadius: '4px' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--light-blue)'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                       <strong style={{ display: 'block', fontSize: '16px', color: 'var(--primary-blue)' }}>{course.cim}</strong>
                       <span style={{ fontSize: '12px', color: 'var(--text-light)' }}>{course.drills?.length || 0} variáció tartalmazza</span>
                     </div>
@@ -306,12 +305,8 @@ export default function VariationExplorer({ onBack, settings }) {
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '15px' }}>
-                <button className="btn-outline" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setSelectedCourse(null)}>
-                  🔙 Vissza
-                </button>
-                <h3 style={{ margin: 0, fontSize: '18px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {selectedCourse.cim}
-                </h3>
+                <button className="btn-outline" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setSelectedCourse(null)}>🔙 Vissza</button>
+                <h3 style={{ margin: 0, fontSize: '18px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedCourse.cim}</h3>
               </div>
 
               <div style={{ overflowY: 'auto', flex: 1, paddingRight: '5px' }}>
@@ -324,22 +319,10 @@ export default function VariationExplorer({ onBack, settings }) {
                           const isWhite = mIdx % 2 === 0;
                           const moveNumber = Math.floor(mIdx / 2) + 1;
                           const isActive = activeMove === `${drill.id || dIdx}-${mIdx}`;
-                          
                           return (
                             <React.Fragment key={mIdx}>
                               {isWhite && <span style={{ color: 'var(--text-light)', fontSize: '13px', lineHeight: '28px', marginLeft: '4px' }}>{moveNumber}.</span>}
-                              <button
-                                style={{
-                                  padding: '4px 8px',
-                                  border: isActive ? '2px solid var(--primary-blue)' : '1px solid #ccc',
-                                  background: isActive ? 'var(--light-blue)' : '#f9f9f9',
-                                  borderRadius: '4px',
-                                  cursor: 'pointer',
-                                  fontWeight: isActive ? 'bold' : 'normal',
-                                  fontSize: '14px'
-                                }}
-                                onClick={() => playMoveSequence(drill.lepesek, mIdx, drill.id || dIdx)}
-                              >
+                              <button style={{ padding: '4px 8px', border: isActive ? '2px solid var(--primary-blue)' : '1px solid #ccc', background: isActive ? 'var(--light-blue)' : '#f9f9f9', borderRadius: '4px', cursor: 'pointer', fontWeight: isActive ? 'bold' : 'normal', fontSize: '14px' }} onClick={() => playMoveSequence(drill.lepesek, mIdx, drill.id || dIdx)}>
                                 {move}
                               </button>
                             </React.Fragment>
