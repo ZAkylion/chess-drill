@@ -3,6 +3,7 @@ import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { supabase } from './supabaseClient';
 import { boardThemes, getCustomPieces } from './chessConfig';
+import { translations } from './translations';
 
 export default function DrillEditor({ onBack, session, isAdmin, settings }) {
   const [activeTab, setActiveTab] = useState('editor');
@@ -12,7 +13,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
   
   const [editKategoria, setEditKategoria] = useState('');
   const [editChapter, setEditChapter] = useState('');
-  const [editMegjegyzes, setEditMegjegyzes] = useState(''); // ÚJ: Megjegyzés állapota
+  const [editMegjegyzes, setEditMegjegyzes] = useState(''); 
   
   const [editLepesek, setEditLepesek] = useState([]);
   const [drillLista, setDrillLista] = useState([]);
@@ -22,6 +23,9 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
 
   const [optionSquares, setOptionSquares] = useState({});
   const [moveFrom, setMoveFrom] = useState(''); 
+
+  const lang = settings?.language || 'hu';
+  const t = translations[lang];
 
   const customPieces = useMemo(() => getCustomPieces(settings?.pieceStyle), [settings?.pieceStyle]);
 
@@ -60,7 +64,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
     setEditingDrillNev(drill.nev);
     setEditKategoria(drill.kategoria || '');
     setEditChapter(drill.chapter || ''); 
-    setEditMegjegyzes(drill.megjegyzes || ''); // ÚJ: Megjegyzés betöltése
+    setEditMegjegyzes(drill.megjegyzes || ''); 
     const moves = drill.lepesek.split(',');
     setEditLepesek(moves);
     const tempGame = new Chess();
@@ -81,7 +85,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
     setGame(new Chess()); 
     setEditLepesek([]); 
     setEditingDrillNev(null);
-    setEditMegjegyzes(''); // ÚJ: Megjegyzés törlése
+    setEditMegjegyzes(''); 
     setHistory([{ fen: new Chess().fen(), lastMove: null }]); 
     setLépésIndex(0);
     setOptionSquares({});
@@ -193,7 +197,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
   }
 
   async function saveDrill() {
-    if (!editKategoria.trim() || !editChapter.trim()) return alert("A Kurzus és a Fejezet neve kötelező!");
+    if (!editKategoria.trim() || !editChapter.trim()) return alert(t.errorMissingFields);
 
     const { data: letezoMappa } = await supabase.from('mappak').select('allapot').eq('nev', editKategoria.trim()).single();
     const mappaAllapot = letezoMappa ? letezoMappa.allapot : 'publikus';
@@ -204,7 +208,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
       nev: editingDrillNev || `${editKategoria.trim()} - ${Date.now()}`, 
       kategoria: editKategoria.trim(), 
       chapter: editChapter.trim(), 
-      megjegyzes: editMegjegyzes.trim(), // ÚJ: Megjegyzés mentése
+      megjegyzes: editMegjegyzes.trim(),
       lepesek: editLepesek.join(','), 
       user_id: session.user.id, 
       allapot: mappaAllapot, 
@@ -216,18 +220,18 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
     
     fetchList(); 
     resetEditor();
-    alert('Sikeresen mentve!');
+    alert(t.saveSuccess);
   }
 
   async function handleDelete(nev) {
-    if(window.confirm(`Biztosan törlöd ezt a variációt: ${nev}?`)) { 
+    if(window.confirm(`${t.confirmDelete}${nev}?`)) { 
       await supabase.from('variaciok').delete().eq('nev', nev); 
       fetchList(); 
     }
   }
 
   async function handleRename(oldName) {
-    const newName = window.prompt('Add meg az új nevet a variációnak:', oldName);
+    const newName = window.prompt(t.promptRename, oldName);
     if (newName && newName.trim() !== '' && newName !== oldName) {
       await supabase.from('variaciok').update({ nev: newName.trim() }).eq('nev', oldName);
       fetchList();
@@ -248,13 +252,13 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
   return (
     <div className="center-container" style={{ maxWidth: '800px', width: '100%' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', width: '100%' }}>
-        <button className="btn-outline" onClick={onBack}>⬅️ Főmenü</button>
+        <button className="btn-outline" onClick={onBack}>{t.backToMenu}</button>
         <div style={{ display: 'flex', gap: '10px' }}>
           <button className={activeTab === 'editor' ? "btn-primary" : "btn-outline"} onClick={() => setActiveTab('editor')}>
-            ♟️ Szerkesztő
+            {t.editorTab}
           </button>
           <button className={activeTab === 'manager' ? "btn-primary" : "btn-outline"} onClick={() => { setActiveTab('manager'); setManagerCourse(null); }}>
-            📚 Kurzusaim
+            {t.managerTab}
           </button>
         </div>
       </div>
@@ -262,32 +266,31 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
       {activeTab === 'editor' && (
         <div className="card" style={{ width: '100%' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
-            <h2 style={{ margin: 0 }}>{editingDrillNev ? `✏️ Variáció: ${editingDrillNev}` : '➕ Új variáció'}</h2>
-            {editingDrillNev && <button className="btn-outline" onClick={resetEditor} style={{ padding: '5px 10px', fontSize: '12px' }}>✖ Mégsem</button>}
+            <h2 style={{ margin: 0 }}>{editingDrillNev ? `✏️ ${editingDrillNev}` : t.newVariation}</h2>
+            {editingDrillNev && <button className="btn-outline" onClick={resetEditor} style={{ padding: '5px 10px', fontSize: '12px' }}>{t.cancel}</button>}
           </div>
           
           <div style={{ display: 'grid', gridTemplateColumns: editKategoria.trim() !== '' ? '1fr 1fr' : '1fr', gap: '15px', marginBottom: '15px' }}>
             <div>
-              <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-light)', display: 'block', marginBottom: '5px' }}>Kurzus (Mappa) Neve</label>
-              <input className="input-field" placeholder="Pl.: Szicíliai Védelem" value={editKategoria} onChange={(e) => setEditKategoria(e.target.value)} list="course-suggestions" />
+              <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-light)', display: 'block', marginBottom: '5px' }}>{t.courseNameLabel}</label>
+              <input className="input-field" placeholder={t.coursePlaceholder} value={editKategoria} onChange={(e) => setEditKategoria(e.target.value)} list="course-suggestions" />
               <datalist id="course-suggestions">{myCourses.map(course => <option key={course} value={course} />)}</datalist>
             </div>
             
             {editKategoria.trim() !== '' && (
               <div>
-                <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-light)', display: 'block', marginBottom: '5px' }}>Fejezet (Chapter)</label>
-                <input className="input-field" placeholder="Pl.: Sárkány-változat" value={editChapter} onChange={(e) => setEditChapter(e.target.value)} list="chapter-suggestions" />
+                <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-light)', display: 'block', marginBottom: '5px' }}>{t.chapterLabel}</label>
+                <input className="input-field" placeholder={t.chapterPlaceholder} value={editChapter} onChange={(e) => setEditChapter(e.target.value)} list="chapter-suggestions" />
                 <datalist id="chapter-suggestions">{myChapters.map(chapter => <option key={chapter} value={chapter} />)}</datalist>
               </div>
             )}
           </div>
 
-          {/* ÚJ: Megjegyzés mező */}
           <div style={{ marginBottom: '20px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-light)', display: 'block', marginBottom: '5px' }}>Megjegyzés a variáció végére (Opcionális)</label>
+            <label style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--text-light)', display: 'block', marginBottom: '5px' }}>{t.commentLabel}</label>
             <textarea 
               className="input-field" 
-              placeholder="Ide írhatsz magyarázatot, miért ez a legjobb lépéssorozat..." 
+              placeholder={t.commentPlaceholder} 
               value={editMegjegyzes} 
               onChange={(e) => setEditMegjegyzes(e.target.value)}
               style={{ resize: 'vertical', minHeight: '60px' }}
@@ -313,7 +316,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
           <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
             <button className="btn-outline" onClick={handlePrev}>◀️</button>
             <button className="btn-outline" onClick={handleNext}>▶️</button>
-            <button className="btn-primary" onClick={saveDrill}>💾 Mentés</button>
+            <button className="btn-primary" onClick={saveDrill}>{t.saveBtn}</button>
           </div>
         </div>
       )}
@@ -322,9 +325,9 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
         <div className="card" style={{ width: '100%', minHeight: '400px' }}>
           {!managerCourse ? (
             <>
-              <h2 style={{ color: 'var(--primary-blue)', marginTop: 0, borderBottom: '2px solid #eee', paddingBottom: '10px' }}>📁 Saját Kurzusaim</h2>
+              <h2 style={{ color: 'var(--primary-blue)', marginTop: 0, borderBottom: '2px solid #eee', paddingBottom: '10px' }}>{t.myCoursesTitle}</h2>
               {myCourses.length === 0 ? (
-                <p style={{ textAlign: 'center', color: 'var(--text-light)', marginTop: '40px' }}>Még nem hoztál létre saját variációt.</p>
+                <p style={{ textAlign: 'center', color: 'var(--text-light)', marginTop: '40px' }}>{t.noVariationsYet}</p>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '15px', marginTop: '20px' }}>
                   {myCourses.map(courseName => {
@@ -332,7 +335,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
                     return (
                       <div key={courseName} onClick={() => setManagerCourse(courseName)} style={{ border: '1px solid #ddd', padding: '15px', borderRadius: '8px', cursor: 'pointer', transition: 'all 0.2s' }} onMouseOver={(e) => Object.assign(e.currentTarget.style, { borderColor: 'var(--primary-blue)', background: 'var(--light-blue)' })} onMouseOut={(e) => Object.assign(e.currentTarget.style, { borderColor: '#ddd', background: 'transparent' })}>
                         <h3 style={{ margin: '0 0 10px 0', fontSize: '16px' }}>📂 {courseName}</h3>
-                        <span style={{ fontSize: '13px', color: 'var(--text-light)' }}>{count} variáció</span>
+                        <span style={{ fontSize: '13px', color: 'var(--text-light)' }}>{count} {t.variationCount}</span>
                       </div>
                     );
                   })}
@@ -342,7 +345,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
           ) : (
             <>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '20px' }}>
-                <button className="btn-outline" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => setManagerCourse(null)}>🔙 Vissza</button>
+                <button className="btn-outline" style={{ padding: '4px 10px', fontSize: '12px' }} onClick={() => setManagerCourse(null)}>{t.backBtn}</button>
                 <h2 style={{ margin: 0, color: 'var(--text-dark)' }}>{managerCourse}</h2>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -360,7 +363,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
                         <h3 style={{ margin: 0, color: 'var(--primary-blue)', fontSize: '16px' }}>📑 {chapterName}</h3>
                         <button onClick={() => handleAddVariationToChapter(managerCourse, chapterName)} style={{ border: 'none', background: '#D1FAE5', color: '#047857', padding: '6px 12px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>
-                          ➕ Új variáció
+                          {t.newVariation}
                         </button>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -368,9 +371,9 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
                           <div key={d.nev} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '10px 15px', borderRadius: '6px', border: '1px solid #eee' }}>
                             <span style={{ fontWeight: '500', fontSize: '14px' }}>{d.nev}</span>
                             <div style={{ display: 'flex', gap: '8px' }}>
-                              <button onClick={() => startEditing(d)} style={{ border: 'none', background: '#DBEAFE', color: '#1D4ED8', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>✏️ Szerkesztés</button>
-                              <button onClick={() => handleRename(d.nev)} style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>🔄 Átnevezés</button>
-                              <button onClick={() => handleDelete(d.nev)} style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>🗑️ Törlés</button>
+                              <button onClick={() => startEditing(d)} style={{ border: 'none', background: '#DBEAFE', color: '#1D4ED8', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>{t.editBtnShort}</button>
+                              <button onClick={() => handleRename(d.nev)} style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>{t.renameBtn}</button>
+                              <button onClick={() => handleDelete(d.nev)} style={{ border: 'none', background: '#FEE2E2', color: '#DC2626', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>{t.deleteBtn}</button>
                             </div>
                           </div>
                         ))}

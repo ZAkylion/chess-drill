@@ -1,224 +1,281 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Chessboard } from 'react-chessboard';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Chess } from 'chess.js';
+import { Chessboard } from 'react-chessboard';
 import { supabase } from './supabaseClient';
 import { boardThemes, getCustomPieces } from './chessConfig';
-
-const getBaseFen = (fenString) => fenString.split(' ').slice(0, 4).join(' ');
+import { translations } from './translations';
 
 export default function VariationExplorer({ onBack, settings }) {
-  const [courses, setCourses] = useState([]); 
   const [game, setGame] = useState(new Chess());
-  const [fen, setFen] = useState(game.fen());
-  const [activeMove, setActiveMove] = useState(null);
-  const [moveHistory, setMoveHistory] = useState([]);
-  const [moveIndex, setMoveIndex] = useState(0);
-  const [selectedCourse, setSelectedCourse] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [arrows, setArrows] = useState([]);
+  const [history, setHistory] = useState([{ fen: new Chess().fen(), lastMove: null }]);
+  const [lépésIndex, setLépésIndex] = useState(0);
+  const [allVariations, setAllVariations] = useState([]);
   const [optionSquares, setOptionSquares] = useState({});
   const [moveFrom, setMoveFrom] = useState('');
 
+  const lang = settings?.language || 'hu';
+  const t = translations[lang];
+
   const customPieces = useMemo(() => getCustomPieces(settings?.pieceStyle), [settings?.pieceStyle]);
-  const darkSquareStyle = { backgroundColor: boardThemes[settings?.boardTheme || 'blue']?.dark };
-  const lightSquareStyle = { backgroundColor: boardThemes[settings?.boardTheme || 'blue']?.light };
 
   useEffect(() => {
-    async function fetchAllCourses() {
-      const { data } = await supabase.from('variaciok').select('*');
-      if (data) {
-        const grouped = data.reduce((acc, drill) => {
-          if (!acc[drill.kategoria]) acc[drill.kategoria] = { id: drill.kategoria, cim: drill.kategoria, drills: [] };
-          acc[drill.kategoria].drills.push(drill);
-          return acc;
-        }, {});
-        setCourses(Object.values(grouped));
-      }
+    async function fetchAll() {
+      const { data } = await supabase.from('variaciok').select('*').eq('allapot', 'publikus');
+      if (data) setAllVariations(data);
     }
-    fetchAllCourses();
+    fetchAll();
   }, []);
 
-  const rebuildGame = useCallback((moves) => {
-    const newGame = new Chess();
-    for (const m of moves) { try { newGame.move(m); } catch(e) {} }
-    setGame(newGame); setFen(newGame.fen()); setOptionSquares({}); setMoveFrom('');
-  }, []);
-
-  const handlePrev = useCallback(() => { if (moveIndex > 0) { const newIdx = moveIndex - 1; setMoveIndex(newIdx); rebuildGame(moveHistory.slice(0, newIdx)); setActiveMove(null); } }, [moveIndex, moveHistory, rebuildGame]);
-  const handleNext = useCallback(() => { if (moveIndex < moveHistory.length) { const newIdx = moveIndex + 1; setMoveIndex(newIdx); rebuildGame(moveHistory.slice(0, newIdx)); setActiveMove(null); } }, [moveIndex, moveHistory, rebuildGame]);
-
   useEffect(() => {
-    const handleKeyDown = (e) => { if (e.key === 'ArrowLeft') handlePrev(); if (e.key === 'ArrowRight') handleNext(); };
-    window.addEventListener('keydown', handleKeyDown); return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handlePrev, handleNext]);
-
-  useEffect(() => {
-    const currentBaseFen = getBaseFen(game.fen());
-    const newArrows = [];
-    const seenMoves = new Set(); 
-    const drillsToCheck = selectedCourse ? selectedCourse.drills : courses.flatMap(c => c.drills);
-    drillsToCheck.forEach(drill => {
-      if (!drill.lepesek) return;
-      const drillMoves = drill.lepesek.split(',').map(m => m.trim()).filter(Boolean);
-      const tempBoard = new Chess(); 
-      if (getBaseFen(tempBoard.fen()) === currentBaseFen && drillMoves.length > 0) {
-        const nextSan = drillMoves[0];
-        if (!seenMoves.has(nextSan)) {
-          seenMoves.add(nextSan);
-          try {
-            const testGame = new Chess(game.fen());
-            const moveObj = testGame.move(nextSan);
-            if (moveObj) newArrows.push([moveObj.from, moveObj.to, 'rgba(34, 197, 94, 0.8)']);
-          } catch(e) {}
-        }
-      }
-      for (let i = 0; i < drillMoves.length; i++) {
-        try {
-          tempBoard.move(drillMoves[i]);
-          if (getBaseFen(tempBoard.fen()) === currentBaseFen && i + 1 < drillMoves.length) {
-            const nextSan = drillMoves[i + 1];
-            if (!seenMoves.has(nextSan)) {
-              seenMoves.add(nextSan);
-              const testGame = new Chess(game.fen());
-              const moveObj = testGame.move(nextSan);
-              if (moveObj) newArrows.push([moveObj.from, moveObj.to, 'rgba(34, 197, 94, 0.8)']);
-            }
-          }
-        } catch (e) { break; }
-      }
-    });
-    setArrows(newArrows);
-  }, [fen, selectedCourse, courses, game]); 
+    const handleKeyDown = (e) => {
+      if (e.key === 'ArrowLeft') handlePrev();
+      if (e.key === 'ArrowRight') handleNext();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [lépésIndex, history]);
 
   function getMoveOptions(square) {
     if (settings?.showLegalMoves === false) return;
     const moves = game.moves({ square, verbose: true });
-    if (moves.length === 0) { setOptionSquares({}); return; }
+    if (moves.length === 0) {
+      setOptionSquares({});
+      return;
+    }
     const newSquares = {};
     moves.forEach((m) => {
       const isCapture = game.get(m.to) && game.get(m.to).color !== game.get(square).color;
-      if (isCapture) newSquares[m.to] = { boxShadow: 'inset 0 0 0 6px rgba(0,0,0,.2)', borderRadius: '50%' };
-      else newSquares[m.to] = { background: 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)', borderRadius: '50%' };
+      if (isCapture) {
+        newSquares[m.to] = { boxShadow: 'inset 0 0 0 6px rgba(0,0,0,.2)', borderRadius: '50%' };
+      } else {
+        newSquares[m.to] = { background: 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)', borderRadius: '50%' };
+      }
     });
     newSquares[square] = { background: 'rgba(255, 255, 51, 0.5)' };
     setOptionSquares(newSquares);
   }
 
-  function onPieceDragBegin(piece, sourceSquare) { setMoveFrom(sourceSquare); getMoveOptions(sourceSquare); }
+  function onPieceDragBegin(piece, sourceSquare) {
+    setMoveFrom(sourceSquare);
+    getMoveOptions(sourceSquare);
+  }
 
   function onSquareClick(square) {
-    if (moveFrom === square) { setMoveFrom(''); setOptionSquares({}); return; }
+    if (moveFrom === square) {
+      setMoveFrom('');
+      setOptionSquares({});
+      return;
+    }
+
     if (moveFrom) {
       const gameCopy = new Chess(game.fen());
-      try {
-        const move = gameCopy.move({ from: moveFrom, to: square, promotion: 'q' });
-        if (move) { onDrop(moveFrom, square); return; }
-      } catch (e) {}
+      const move = gameCopy.move({ from: moveFrom, to: square, promotion: 'q' });
+      if (move) {
+        onDrop(moveFrom, square);
+        return;
+      }
       const piece = game.get(square);
-      if (piece && piece.color === game.turn()) { setMoveFrom(square); if (settings?.showLegalMoves !== false) getMoveOptions(square); } 
-      else { setMoveFrom(''); setOptionSquares({}); }
+      if (piece && piece.color === game.turn()) {
+        setMoveFrom(square);
+        if (settings?.showLegalMoves !== false) getMoveOptions(square);
+      } else {
+        setMoveFrom('');
+        setOptionSquares({});
+      }
     } else {
       const piece = game.get(square);
-      if (piece && piece.color === game.turn()) { setMoveFrom(square); if (settings?.showLegalMoves !== false) getMoveOptions(square); } 
-      else { setOptionSquares({}); }
+      if (piece && piece.color === game.turn()) {
+        setMoveFrom(square);
+        if (settings?.showLegalMoves !== false) getMoveOptions(square);
+      } else {
+        setOptionSquares({});
+      }
     }
   }
 
-  function onDrop(sourceSquare, targetSquare) {
-    if (sourceSquare === targetSquare) { setMoveFrom(sourceSquare); if (settings?.showLegalMoves !== false) getMoveOptions(sourceSquare); return false; }
-    setOptionSquares({}); setMoveFrom('');
-    try {
-      const testGame = new Chess(game.fen());
-      const move = testGame.move({ from: sourceSquare, to: targetSquare, promotion: 'q' });
-      if (!move) return false;
-      const newHistory = [...moveHistory.slice(0, moveIndex), move.san];
-      setMoveHistory(newHistory); setMoveIndex(newHistory.length);
-      setGame(testGame); setFen(testGame.fen()); setActiveMove(null);
-      return true;
-    } catch (e) { return false; }
-  }
-
-  function playMoveSequence(lepesekString, targetIndex, drillId) {
-    const moves = lepesekString.split(',').map(m => m.trim()).filter(Boolean);
-    setMoveHistory(moves); setMoveIndex(targetIndex + 1); rebuildGame(moves.slice(0, targetIndex + 1)); setActiveMove(`${drillId}-${targetIndex}`);
-  }
-
-  function resetBoard() { setMoveHistory([]); setMoveIndex(0); rebuildGame([]); setActiveMove(null); setOptionSquares({}); setMoveFrom(''); }
-
-  const filteredCourses = courses.filter(c => {
-    const matchesSearch = c.cim.toLowerCase().includes(searchTerm.toLowerCase());
-    if (!matchesSearch) return false;
-    const currentBaseFen = getBaseFen(game.fen());
-    if (currentBaseFen === getBaseFen(new Chess().fen())) return true;
-    return c.drills.some(drill => {
-      const tempBoard = new Chess(); if (getBaseFen(tempBoard.fen()) === currentBaseFen) return true;
-      const moves = drill.lepesek.split(',').map(m => m.trim()).filter(Boolean);
-      for (let m of moves) { try { tempBoard.move(m); if (getBaseFen(tempBoard.fen()) === currentBaseFen) return true; } catch(e) { break; } }
+  function onDrop(source, target) {
+    if (source === target) {
+      setMoveFrom(source);
+      if (settings?.showLegalMoves !== false) getMoveOptions(source);
       return false;
-    });
-  });
+    }
 
+    setOptionSquares({});
+    setMoveFrom('');
+    const gameCopy = new Chess(game.fen());
+    const move = gameCopy.move({ from: source, to: target, promotion: 'q' });
+    if (move) {
+      setGame(gameCopy);
+      const newHistory = [...history.slice(0, lépésIndex + 1), { fen: gameCopy.fen(), lastMove: { from: move.from, to: move.to } }];
+      setHistory(newHistory);
+      setLépésIndex(newHistory.length - 1);
+    }
+    return !!move;
+  }
+
+  function handlePrev() {
+    if (lépésIndex > 0) {
+      setLépésIndex(lépésIndex - 1);
+      setGame(new Chess(history[lépésIndex - 1].fen));
+      setOptionSquares({});
+      setMoveFrom('');
+    }
+  }
+
+  function handleNext() {
+    if (lépésIndex < history.length - 1) {
+      setLépésIndex(lépésIndex + 1);
+      setGame(new Chess(history[lépésIndex + 1].fen));
+      setOptionSquares({});
+      setMoveFrom('');
+    }
+  }
+
+  function loadVariation(movesStr) {
+    const moves = movesStr.split(',');
+    const tempGame = new Chess();
+    const newHistory = [{ fen: tempGame.fen(), lastMove: null }];
+    moves.forEach(m => {
+      const res = tempGame.move(m);
+      if (res) newHistory.push({ fen: tempGame.fen(), lastMove: { from: res.from, to: res.to } });
+    });
+    setGame(tempGame);
+    setHistory(newHistory);
+    setLépésIndex(newHistory.length - 1);
+    setOptionSquares({});
+    setMoveFrom('');
+  }
+
+  const elerhetoLepesek = useMemo(() => {
+    const currentMovesSan = history.slice(1, lépésIndex + 1).map(h => {
+      const temp = new Chess(history[history.indexOf(h)-1].fen);
+      const m = temp.move({ from: h.lastMove.from, to: h.lastMove.to, promotion: 'q' });
+      return m.san;
+    }).join(',');
+
+    const matchStats = {};
+    const exactMatches = [];
+
+    allVariations.forEach(drill => {
+      if (lépésIndex === 0 || drill.lepesek.startsWith(currentMovesSan)) {
+        if (drill.lepesek === currentMovesSan) {
+          exactMatches.push(drill);
+        } else {
+          const mArr = drill.lepesek.split(',');
+          const nextSan = mArr[lépésIndex];
+          if (nextSan) {
+            if (!matchStats[nextSan]) matchStats[nextSan] = { count: 0, authors: new Set() };
+            matchStats[nextSan].count++;
+            matchStats[nextSan].authors.add(drill.szerzo_nev);
+          }
+        }
+      }
+    });
+
+    const options = Object.entries(matchStats).map(([san, data]) => ({
+      san,
+      count: data.count,
+      authors: Array.from(data.authors).join(', ')
+    })).sort((a, b) => b.count - a.count);
+
+    return { options, exactMatches };
+  }, [allVariations, history, lépésIndex]);
+
+  const lastMove = history[lépésIndex]?.lastMove;
+  const moveSquares = lastMove ? { [lastMove.from]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' }, [lastMove.to]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
   const clickSelectStyle = moveFrom ? { [moveFrom]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
-  const customSquareStyles = { ...optionSquares, ...clickSelectStyle };
+  const customSquareStyles = { ...moveSquares, ...optionSquares, ...clickSelectStyle };
 
   return (
-    <div className="center-container" style={{ maxWidth: '900px' }}>
+    <div style={{ maxWidth: '1000px', margin: '40px auto', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <button className="btn-outline" onClick={onBack}>⬅️ Főmenü</button>
-        <h2 style={{ margin: 0, color: 'var(--primary-blue)' }}>🔍 Megnyitás Explorer</h2>
+        <button className="btn-outline" onClick={onBack}>{t.backToMenu}</button>
+        <h2>{t.currentPosition}</h2>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '20px' }}>
-        <div className="card" style={{ padding: '20px' }}>
-          <Chessboard position={fen} onPieceDrop={onDrop} onPieceDragBegin={onPieceDragBegin} onSquareClick={onSquareClick} customDarkSquareStyle={darkSquareStyle} customLightSquareStyle={lightSquareStyle} customPieces={customPieces} customArrows={[...arrows]} showBoardNotation={settings?.showCoordinates ?? true} customSquareStyles={customSquareStyles} animationDuration={200} />
-          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '10px' }}>
-            <button className="btn-outline" onClick={handlePrev} disabled={moveIndex === 0} style={{ padding: '10px 15px', opacity: moveIndex === 0 ? 0.5 : 1, cursor: moveIndex === 0 ? 'not-allowed' : 'pointer' }}>◀️</button>
-            <button className="btn-outline" onClick={handleNext} disabled={moveIndex === moveHistory.length} style={{ padding: '10px 15px', opacity: moveIndex === moveHistory.length ? 0.5 : 1, cursor: moveIndex === moveHistory.length ? 'not-allowed' : 'pointer' }}>▶️</button>
-            <button className="btn-outline" onClick={resetBoard}>🔄 Alaphelyzet</button>
+
+      <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', justifyContent: 'center' }}>
+        
+        {/* Sakktábla */}
+        <div style={{ width: '500px' }}>
+          <div style={{ boxShadow: 'var(--shadow-md)', borderRadius: '4px', overflow: 'hidden' }}>
+            <Chessboard 
+              position={game.fen()} 
+              onPieceDrop={onDrop}
+              onPieceDragBegin={onPieceDragBegin}
+              onSquareClick={onSquareClick}
+              customPieces={customPieces}
+              customDarkSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.dark }}
+              customLightSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.light }}
+              showBoardNotation={settings?.showCoordinates ?? true}
+              customSquareStyles={customSquareStyles}
+            />
+          </div>
+          <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '15px' }}>
+            <button className="btn-outline" onClick={handlePrev} disabled={lépésIndex === 0} style={{ opacity: lépésIndex === 0 ? 0.5 : 1 }}>◀️</button>
+            <button className="btn-outline" onClick={handleNext} disabled={lépésIndex === history.length - 1} style={{ opacity: lépésIndex === history.length - 1 ? 0.5 : 1 }}>▶️</button>
+            <button className="btn-outline" onClick={() => loadVariation('')}>{t.resetBtn}</button>
           </div>
         </div>
-        <div className="card" style={{ height: '540px', display: 'flex', flexDirection: 'column' }}>
-          {!selectedCourse ? (
-            <>
-              <h3 style={{ marginTop: 0, borderBottom: '2px solid #eee', paddingBottom: '10px' }}>Közösségi Megnyitások {moveIndex > 0 && <span style={{ fontSize: '12px', color: 'var(--primary-blue)' }}>(Szűrve az állásra)</span>}</h3>
-              <input type="text" className="input-field" placeholder="Keresés a megnyitások között..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} style={{ marginBottom: '15px' }} />
-              <div style={{ overflowY: 'auto', flex: 1, paddingRight: '5px' }}>
-                {filteredCourses.length > 0 ? filteredCourses.map(course => (
-                  <div key={course.id} onClick={() => setSelectedCourse(course)} style={{ padding: '12px', borderBottom: '1px solid #eee', cursor: 'pointer', transition: 'background 0.2s', borderRadius: '4px' }} onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'var(--light-blue)'} onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
-                    <strong style={{ display: 'block', fontSize: '16px', color: 'var(--primary-blue)' }}>{course.cim}</strong>
-                    <span style={{ fontSize: '12px', color: 'var(--text-light)' }}>{course.drills?.length || 0} variáció tartalmazza</span>
-                  </div>
-                )) : <p style={{ color: 'var(--text-light)', textAlign: 'center', marginTop: '20px' }}>Ebben a pozícióban nincs ismert folytatás.</p>}
-              </div>
-            </>
+
+        {/* Lépések / Változatok listája */}
+        <div className="card" style={{ width: '400px', alignSelf: 'flex-start', maxHeight: '550px', overflowY: 'auto' }}>
+          <h3 style={{ marginTop: 0, color: 'var(--primary-blue)', borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
+            {t.availableMoves}
+          </h3>
+
+          {elerhetoLepesek.options.length === 0 && elerhetoLepesek.exactMatches.length === 0 ? (
+            <p style={{ color: 'var(--text-light)', textAlign: 'center', marginTop: '20px' }}>{t.noDataExplorer}</p>
           ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', borderBottom: '2px solid #eee', paddingBottom: '10px', marginBottom: '15px' }}>
-                <button className="btn-outline" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => setSelectedCourse(null)}>🔙 Vissza</button>
-                <h3 style={{ margin: 0, fontSize: '18px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{selectedCourse.cim}</h3>
-              </div>
-              <div style={{ overflowY: 'auto', flex: 1, paddingRight: '5px' }}>
-                {selectedCourse.drills && selectedCourse.drills.length > 0 ? selectedCourse.drills.map((drill, dIdx) => (
-                  <div key={drill.id || dIdx} style={{ marginBottom: '25px' }}>
-                    <h4 style={{ margin: '0 0 10px 0', color: 'var(--text-dark)' }}>{drill.nev}</h4>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
-                      {drill.lepesek.split(',').map(m => m.trim()).filter(Boolean).map((move, mIdx) => {
-                        const isWhite = mIdx % 2 === 0;
-                        const moveNumber = Math.floor(mIdx / 2) + 1;
-                        const isActive = activeMove === `${drill.id || dIdx}-${mIdx}`;
-                        return (
-                          <React.Fragment key={mIdx}>
-                            {isWhite && <span style={{ color: 'var(--text-light)', fontSize: '13px', lineHeight: '28px', marginLeft: '4px' }}>{moveNumber}.</span>}
-                            <button style={{ padding: '4px 8px', border: isActive ? '2px solid var(--primary-blue)' : '1px solid #ccc', background: isActive ? 'var(--light-blue)' : '#f9f9f9', borderRadius: '4px', cursor: 'pointer', fontWeight: isActive ? 'bold' : 'normal', fontSize: '14px' }} onClick={() => playMoveSequence(drill.lepesek, mIdx, drill.id || dIdx)}>{move}</button>
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )) : <p style={{ color: 'var(--text-light)', fontStyle: 'italic', textAlign: 'center' }}>Nincsenek elérhető variációk.</p>}
-              </div>
-            </>
+            <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
+              <thead>
+                <tr style={{ background: '#F3F4F6', color: '#374151' }}>
+                  <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>{t.moveCol}</th>
+                  <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #E5E7EB' }}>{t.freqCol}</th>
+                  <th style={{ padding: '10px', textAlign: 'right', borderBottom: '2px solid #E5E7EB' }}>{t.authorCol}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {elerhetoLepesek.options.map(opt => (
+                  <tr key={opt.san} 
+                      onClick={() => {
+                        const tempGame = new Chess(game.fen());
+                        const move = tempGame.move(opt.san);
+                        if(move) {
+                          setGame(tempGame);
+                          const newHistory = [...history.slice(0, lépésIndex + 1), { fen: tempGame.fen(), lastMove: { from: move.from, to: move.to } }];
+                          setHistory(newHistory);
+                          setLépésIndex(newHistory.length - 1);
+                        }
+                      }}
+                      style={{ cursor: 'pointer', borderBottom: '1px solid #eee', transition: 'background 0.2s' }}
+                      onMouseOver={(e) => e.currentTarget.style.background = '#EFF6FF'}
+                      onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <td style={{ padding: '12px 10px', fontWeight: 'bold', color: 'var(--text-dark)' }}>{opt.san}</td>
+                    <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                      <span style={{ background: 'var(--light-blue)', color: 'var(--primary-blue)', padding: '2px 8px', borderRadius: '12px', fontSize: '12px', fontWeight: 'bold' }}>
+                        {opt.count}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 10px', textAlign: 'right', fontSize: '13px', color: 'var(--text-light)' }}>{opt.authors}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {elerhetoLepesek.exactMatches.length > 0 && (
+            <div style={{ marginTop: '20px' }}>
+              <h4 style={{ color: '#059669', marginBottom: '10px' }}>✅ Ide kifutó teljes variációk:</h4>
+              {elerhetoLepesek.exactMatches.map((drill, i) => (
+                <div key={i} style={{ padding: '10px', background: '#ECFDF5', borderRadius: '6px', marginBottom: '8px', border: '1px solid #A7F3D0', fontSize: '14px' }}>
+                  <strong>{drill.nev}</strong> <span style={{ color: '#666', fontSize: '12px' }}>({drill.szerzo_nev})</span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
+
       </div>
     </div>
   );

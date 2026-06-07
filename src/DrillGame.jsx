@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Chess } from 'chess.js';
 import { Chessboard } from 'react-chessboard';
 import { boardThemes, getCustomPieces } from './chessConfig';
+import { translations } from './translations';
 
 export default function DrillGame({ drill, settings, onComplete, onBack, currentIndex, totalDrills }) {
   const [game, setGame] = useState(new Chess());
@@ -25,6 +26,9 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
   const preMoveRef = useRef(null);
 
   const playerColor = drill.nev.toLowerCase().includes('black') ? 'b' : 'w';
+
+  const lang = settings?.language || 'hu';
+  const t = translations[lang];
 
   const getVisualPosition = () => {
     if (preMoveVisual) {
@@ -357,14 +361,12 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
     <div style={{ maxWidth: '900px', margin: '40px auto', fontFamily: 'sans-serif' }}>
       
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', width: '500px', margin: '0 auto 20px auto' }}>
-        <button className="btn-outline" onClick={onBack}>⬅️ Vissza</button>
+        <button className="btn-outline" onClick={onBack}>{t.backBtn}</button>
         <strong>DRILL {currentIndex + 1} / {totalDrills}</strong>
       </div>
 
-      {/* JAVÍTÁS: Dinamikus elrendezés: középen, ha játszik, balra húz, ha befejezte és van jobb oldali panel */}
       <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'flex-start' }}>
         
-        {/* BAL OLDAL: Sakktábla és játékkontrollok */}
         <div style={{ width: '500px', textAlign: 'center' }}>
           <div style={{ boxShadow: 'var(--shadow-md)', borderRadius: '4px', overflow: 'hidden' }}>
             <Chessboard 
@@ -403,8 +405,8 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
           {!isCompleted && (
             <div className="card" style={{ marginTop: '20px', padding: '15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
               <p style={{ margin: 0, height: '20px', fontWeight: 'bold', color: hintLevel > 0 ? 'var(--primary-blue)' : 'transparent' }}>
-                {hintLevel === 1 && '💡 Mozgasd a kiemelt bábut!'}
-                {hintLevel === 2 && '🎯 Kövesd a nyilat a helyes lépéshez!'}
+                {hintLevel === 1 && t.hintMovePiece}
+                {hintLevel === 2 && t.hintFollowArrow}
               </p>
               <button 
                 className="btn-outline" 
@@ -412,19 +414,18 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
                 disabled={hintLevel === 2}
                 style={{ opacity: hintLevel === 2 ? 0.5 : 1, cursor: hintLevel === 2 ? 'not-allowed' : 'pointer', borderColor: hintLevel === 1 ? '#F59E0B' : 'var(--primary-blue)', color: hintLevel === 1 ? '#F59E0B' : 'var(--primary-blue)' }}
               >
-                {hintLevel === 0 ? '💡 Bábu felfedése (Tipp)' : hintLevel === 1 ? '🎯 Pontos célpont (Újabb Tipp)' : '✅ Megoldás felfedve'}
+                {hintLevel === 0 ? t.hintRevealPiece : hintLevel === 1 ? t.hintExactTarget : t.hintRevealed}
               </button>
             </div>
           )}
         </div>
 
-        {/* JOBB OLDAL: Megjegyzés és Következő gomb (Csak akkor jelenik meg, ha a drill kész) */}
         {isCompleted && (
           <div style={{ width: '300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
             {drill.megjegyzes && (
               <div className="card" style={{ background: '#FFFBEB', borderColor: '#FDE68A', padding: '20px' }}>
                 <h3 style={{ margin: '0 0 10px 0', color: '#D97706', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  💡 Megjegyzés
+                  {t.commentTitle}
                 </h3>
                 <p style={{ margin: 0, color: 'var(--text-dark)', lineHeight: '1.6', fontSize: '15px', whiteSpace: 'pre-wrap' }}>
                   {drill.megjegyzes}
@@ -434,7 +435,7 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
             
             <div className="card" style={{ padding: '20px' }}>
               <button className="btn-primary" onClick={() => onComplete(hibák)} style={{ width: '100%', padding: '15px', fontSize: '16px' }}>
-                {currentIndex + 1 < totalDrills ? 'Következő Drill ⏭' : 'Eredmények 📊'}
+                {currentIndex + 1 < totalDrills ? t.nextDrillBtn : t.resultsBtn}
               </button>
             </div>
           </div>

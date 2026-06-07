@@ -1,145 +1,139 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
-import DrillGame from './DrillGame'; 
-import { boardThemes, getCustomPieces } from './chessConfig'; // Importáltuk a konfigurációt
+import DrillGame from './DrillGame';
+import { translations } from './translations';
 
 export default function DrillPlayer({ onBack, session, settings }) {
-  const [drillLista, setDrillLista] = useState([]);
-  const [myRepertoire, setMyRepertoire] = useState([]);
-  
-  const [playMode, setPlayMode] = useState('setup'); 
-  const [selectedKategoriak, setSelectedKategoriak] = useState([]);
-  const [playlist, setPlaylist] = useState([]);
-  const [currentDrillIndex, setCurrentDrillIndex] = useState(0);
-  const [drillResults, setDrillResults] = useState([]); 
+  const [drills, setDrills] = useState([]);
+  const [selectedKategoria, setSelectedKategoria] = useState('');
+  const [selectedChapter, setSelectedChapter] = useState('');
+  const [isRandom, setIsRandom] = useState(true);
+  const [playingDrills, setPlayingDrills] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [results, setResults] = useState([]);
+  const [finished, setFinished] = useState(false);
 
-  useEffect(() => { 
-    fetchList(); 
-    if (session) fetchRepertoire(); 
+  const lang = settings?.language || 'hu';
+  const t = translations[lang];
+
+  useEffect(() => {
+    fetchDrills();
   }, [session]);
 
-  async function fetchList() {
-    const { data } = await supabase.from('variaciok').select('*');
-    if (data) {
-      const lathatoDrillek = data.filter(drill => drill.publikus !== false || (session && drill.user_id === session.user.id));
-      setDrillLista(lathatoDrillek);
+  async function fetchDrills() {
+    if (!session) return;
+    const { data } = await supabase.from('variaciok').select('*').eq('user_id', session.user.id);
+    if (data) setDrills(data);
+  }
+
+  const kategoriak = [...new Set(drills.map(d => d.kategoria).filter(Boolean))];
+  const currentCourseDrills = selectedKategoria ? drills.filter(d => d.kategoria === selectedKategoria) : [];
+  const chapters = [...new Set(currentCourseDrills.map(d => d.chapter).filter(Boolean))];
+
+  function startDrill() {
+    let filtered = currentCourseDrills;
+    if (selectedChapter) {
+      filtered = filtered.filter(d => d.chapter === selectedChapter);
     }
+    if (filtered.length === 0) return;
+    
+    let toPlay = [...filtered];
+    if (isRandom) toPlay = toPlay.sort(() => Math.random() - 0.5);
+    
+    setPlayingDrills(toPlay);
+    setCurrentIndex(0);
+    setResults([]);
+    setFinished(false);
   }
 
-  async function fetchRepertoire() {
-    const { data } = await supabase.from('user_repertoires').select('kategoria').eq('user_id', session.user.id);
-    if (data) setMyRepertoire(data.map(item => item.kategoria));
-  }
-
-  const groupedDrills = drillLista.reduce((acc, drill) => {
-    if (myRepertoire.includes(drill.kategoria)) {
-      (acc[drill.kategoria] = acc[drill.kategoria] || []).push(drill);
-    }
-    return acc;
-  }, {});
-
-  function toggleKategoria(kat) {
-    if (selectedKategoriak.includes(kat)) setSelectedKategoriak(selectedKategoriak.filter(k => k !== kat));
-    else setSelectedKategoriak([...selectedKategoriak, kat]);
-  }
-
-  function shuffleArray(array) {
-    const newArr = [...array];
-    for (let i = newArr.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
-    }
-    return newArr;
-  }
-
-  function startDrillShuffle() {
-    if (selectedKategoriak.length === 0) return alert('Válassz ki legalább egy mappát!');
-    const activeDrills = drillLista.filter(d => selectedKategoriak.includes(d.kategoria));
-    if (activeDrills.length === 0) return alert('Nincs drill a kiválasztott mappákban!');
-
-    setPlaylist(shuffleArray(activeDrills));
-    setCurrentDrillIndex(0);
-    setDrillResults([]); 
-    setPlayMode('playing');
-  }
-
-  function handleDrillComplete(hibákCount) {
-    const isPerfect = hibákCount === 0;
-    setDrillResults(prev => [...prev, { nev: playlist[currentDrillIndex].nev, perfect: isPerfect }]);
-
-    if (currentDrillIndex + 1 < playlist.length) {
-      setCurrentDrillIndex(prev => prev + 1);
+  function handleComplete(hibak) {
+    const newResults = [...results, { drill: playingDrills[currentIndex], hibak }];
+    setResults(newResults);
+    if (currentIndex + 1 < playingDrills.length) {
+      setCurrentIndex(currentIndex + 1);
     } else {
-      setPlayMode('summary');
+      setFinished(true);
     }
   }
 
-  // Setup mód: mappaválasztás
-  if (playMode === 'setup') {
+  if (playingDrills.length > 0 && !finished) {
     return (
-      <div style={{ maxWidth: '600px', margin: '40px auto', fontFamily: 'sans-serif' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '20px' }}>
-          <button className="btn-outline" onClick={onBack}>⬅️ Vissza a főmenübe</button>
-        </div>
+      <DrillGame 
+        key={currentIndex}
+        drill={playingDrills[currentIndex]} 
+        settings={settings}
+        onComplete={handleComplete} 
+        onBack={() => setPlayingDrills([])} 
+        currentIndex={currentIndex}
+        totalDrills={playingDrills.length}
+      />
+    );
+  }
 
-        <h2 style={{ textAlign: 'center', color: 'var(--primary-blue)', marginBottom: '20px' }}>Drill Setup: Mappák kiválasztása</h2>
-        
-        {!session ? (
-          <div className="card" style={{ background: '#FEF2F2', borderColor: '#FCA5A5', color: '#DC2626', textAlign: 'center' }}>
-            <strong>Jelentkezz be a gyakorláshoz!</strong>
+  if (finished) {
+    const osszHiba = results.reduce((acc, curr) => acc + curr.hibak, 0);
+    return (
+      <div className="center-container" style={{ textAlign: 'center' }}>
+        <div className="card">
+          <h2 style={{ color: 'var(--primary-blue)' }}>{t.practiceEnd}</h2>
+          <p style={{ fontSize: '18px' }}>{t.totalDrills} <strong>{playingDrills.length}</strong></p>
+          <p style={{ fontSize: '18px' }}>{t.mistakesCount} <strong style={{ color: osszHiba > 0 ? '#DC2626' : '#059669' }}>{osszHiba}</strong></p>
+          <div style={{ display: 'flex', gap: '15px', justifyContent: 'center', marginTop: '20px' }}>
+            <button className="btn-outline" onClick={() => setPlayingDrills([])}>{t.backToMenu}</button>
+            <button className="btn-primary" onClick={startDrill}>{t.retryBtn}</button>
           </div>
-        ) : Object.keys(groupedDrills).length === 0 ? (
-          <div className="card" style={{ background: '#FFFBEB', borderColor: '#FDE68A', color: '#D97706', textAlign: 'center' }}>
-            <strong>A repertoárod üres!</strong>
-          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="center-container" style={{ maxWidth: '600px', textAlign: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+        <button className="btn-outline" onClick={onBack}>{t.backToMenu}</button>
+      </div>
+
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>{t.startPractice}</h2>
+        {drills.length === 0 ? (
+          <p>{t.selectCoursePrompt}</p>
         ) : (
-          <div className="card">
-            {Object.keys(groupedDrills).map(kat => {
-              const isSelected = selectedKategoriak.includes(kat);
-              return (
-                <div key={kat} onClick={() => toggleKategoria(kat)} style={{ padding: '15px', margin: '10px 0', border: isSelected ? '2px solid var(--primary-blue)' : '1px solid #E5E7EB', borderRadius: '8px', background: isSelected ? 'var(--light-blue)' : 'white', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', transition: 'all 0.2s' }}>
-                  <span style={{ fontSize: '16px', fontWeight: 'bold' }}>📂 {kat}</span>
-                  <span style={{ color: 'var(--text-light)' }}>{groupedDrills[kat].length} variáció</span>
-                </div>
-              );
-            })}
-            
-            <button className="btn-primary" onClick={startDrillShuffle} disabled={selectedKategoriak.length === 0} style={{ width: '100%', padding: '15px', fontSize: '16px', marginTop: '20px', background: selectedKategoriak.length > 0 ? 'var(--primary-blue)' : '#D1D5DB' }}>
-              ▶ START DRILL SHUFFLE
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', textAlign: 'left' }}>
+            <div>
+              <label style={{ fontWeight: 'bold', marginBottom: '5px', display: 'block' }}>{t.courseSelectLabel}</label>
+              <select className="input-field" value={selectedKategoria} onChange={(e) => { setSelectedKategoria(e.target.value); setSelectedChapter(''); }}>
+                <option value="">-- {t.chooseCourse} --</option>
+                {kategoriak.map(k => <option key={k} value={k}>{k}</option>)}
+              </select>
+            </div>
+
+            {selectedKategoria && chapters.length > 0 && (
+              <div>
+                <label style={{ fontWeight: 'bold', marginBottom: '5px', display: 'block' }}>{t.chapterSelectLabel}</label>
+                <select className="input-field" value={selectedChapter} onChange={(e) => setSelectedChapter(e.target.value)}>
+                  <option value="">-- {t.allChapters} --</option>
+                  {chapters.map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                </select>
+              </div>
+            )}
+
+            <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginTop: '10px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                <input type="radio" checked={isRandom} onChange={() => setIsRandom(true)} style={{ accentColor: 'var(--primary-blue)' }} />
+                {t.shuffleMode}
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                <input type="radio" checked={!isRandom} onChange={() => setIsRandom(false)} style={{ accentColor: 'var(--primary-blue)' }} />
+                {t.sequentialMode}
+              </label>
+            </div>
+
+            <button className="btn-primary" onClick={startDrill} disabled={!selectedKategoria} style={{ marginTop: '15px', opacity: !selectedKategoria ? 0.5 : 1 }}>
+              {t.startBtn}
             </button>
           </div>
         )}
       </div>
-    );
-  }
-
-  // Összegzés mód
-  if (playMode === 'summary') {
-    const perfectCount = drillResults.filter(r => r.perfect).length;
-    const totalCount = drillResults.length;
-    const percent = totalCount === 0 ? 0 : Math.round((perfectCount / totalCount) * 100);
-
-    return (
-      <div style={{ maxWidth: '600px', margin: '50px auto', textAlign: 'center', fontFamily: 'sans-serif' }}>
-        <h1 style={{ color: 'var(--primary-blue)' }}>Gyakorlás Befejezve!</h1>
-        <div style={{ width: '200px', height: '200px', borderRadius: '50%', background: `conic-gradient(var(--primary-blue) ${percent}%, #EF4444 0)`, margin: '30px auto', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <span style={{ fontSize: '32px', fontWeight: 'bold' }}>{perfectCount} / {totalCount}</span>
-        </div>
-        <button className="btn-primary" onClick={() => setPlayMode('setup')} style={{ width: '100%', padding: '15px' }}>🔄 Új gyakorlás indítása</button>
-      </div>
-    );
-  }
-
-  // Játék nézet: Itt adjuk át a konfigurációból nyert értékeket a DrillGame-nek
-  return (
-    <DrillGame 
-      key={playlist[currentDrillIndex].nev} 
-      drill={playlist[currentDrillIndex]} 
-      settings={settings} // Ezt az objektumot továbbítjuk
-      currentIndex={currentDrillIndex}
-      totalDrills={playlist.length}
-      onComplete={handleDrillComplete}
-      onBack={() => setPlayMode('setup')}
-    />
+    </div>
   );
 }
