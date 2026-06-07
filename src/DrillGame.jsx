@@ -24,13 +24,24 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
   const [preMoveVisual, setPreMoveVisual] = useState(null);
   const preMoveRef = useRef(null);
 
+  // A játékos színe a drill neve alapján (alapértelmezett: white)
+  const playerColor = drill.nev.toLowerCase().includes('black') ? 'b' : 'w';
+
   const getVisualPosition = () => {
     if (preMoveVisual) {
       const tempGame = new Chess(game.fen());
       try {
-        tempGame.move({ from: preMoveVisual.source, to: preMoveVisual.target, promotion: 'q' });
+        const move = tempGame.move({ from: preMoveVisual.source, to: preMoveVisual.target, promotion: 'q' });
+        if (move) return tempGame.fen();
+      } catch (e) {}
+
+      // Ha a pre-move (még) illegális a jelenlegi állás szerint, vizuálisan akkor is áttesszük
+      const pieceToMove = tempGame.get(preMoveVisual.source);
+      if (pieceToMove) {
+        tempGame.remove(preMoveVisual.source);
+        tempGame.put(pieceToMove, preMoveVisual.target);
         return tempGame.fen();
-      } catch (e) { return game.fen(); }
+      }
     }
     return game.fen();
   };
@@ -75,64 +86,122 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lépésIndex, history, isCompleted, wrongMove, isBotMoving]);
 
-  // JAVÍTÁS 1: Ütések megjelenítése karikával
+  // ÚJ FÜGGVÉNY: Legális Pre-move célpontok generálása
+  function getPremoveOptions(sourceSquare) {
+    const options = [];
+    const piece = game.get(sourceSquare);
+    if (!piece) return options;
+
+    const enemyColor = playerColor === 'w' ? 'b' : 'w';
+    const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+    for (let f of files) {
+      for (let r = 1; r <= 8; r++) {
+        const target = f + r;
+        if (target === sourceSquare) continue;
+
+        const tg = new Chess(game.fen());
+        const fenParts = tg.fen().split(' ');
+        fenParts[1] = playerColor; // Átvesszük az irányítást a teszthez
+        fenParts[3] = '-'; // Kikapcsoljuk az en passant validáció okozta hibákat
+        tg.load(fenParts.join(' '));
+
+        const targetPiece = tg.get(target);
+        
+        // 1. Kijelölt célmező kiürítése (hogy engedje a saját bábu 'leütését')
+        tg.remove(target); 
+
+        // 2. Gyalogok esetén engedélyezzük az üres átlós ütést
+        if (piece.type === 'p') {
+          const isDiagonal = sourceSquare[0] !== target[0];
+          if (isDiagonal) tg.put({ type: 'p', color: enemyColor }, target);
+        }
+
+        try {
+          const move = tg.move({ from: sourceSquare, to: target, promotion: 'q' });
+          if (move) {
+            const isCapture = targetPiece !== null || (piece.type === 'p' && sourceSquare[0] !== target[0]);
+            options.push({ to: target, isCapture });
+          }
+        } catch(e) {}
+      }
+    }
+    return options;
+  }
+
+  // MÓDOSÍTOTT FÜGGVÉNY: A pöttyök megjelenítése
   function getMoveOptions(square) {
     if (settings?.showLegalMoves === false) return;
 
-    const moves = game.moves({ square, verbose: true });
-    if (moves.length === 0) {
-      setOptionSquares({});
-      return;
+    let validMoves = [];
+
+    if (!isBotMoving) {
+      // Normál lépés validáció
+      const moves = game.moves({ square, verbose: true });
+      validMoves = moves.map(m => ({
+        to: m.to,
+        isCapture: game.get(m.to) && game.get(m.to).color !== game.get(square).color
+      }));
+    } else {
+      // Pre-move validáció
+      validMoves = getPremoveOptions(square);
     }
 
     const newSquares = {};
-    moves.forEach((m) => {
-      const isCapture = game.get(m.to) && game.get(m.to).color !== game.get(square).color;
-      if (isCapture) {
-        newSquares[m.to] = {
-          boxShadow: 'inset 0 0 0 6px rgba(0,0,0,.2)', // Belső árnyék csinálja a karikát
-          borderRadius: '50%'
-        };
-      } else {
-        newSquares[m.to] = {
-          background: 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)',
-          borderRadius: '50%'
-        };
-      }
-    });
+    if (validMoves.length > 0) {
+      validMoves.forEach((m) => {
+        if (m.isCapture) {
+          newSquares[m.to] = { boxShadow: 'inset 0 0 0 6px rgba(0,0,0,.2)', borderRadius: '50%' };
+        } else {
+          newSquares[m.to] = { background: 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)', borderRadius: '50%' };
+        }
+      });
+    }
+
     newSquares[square] = { background: 'rgba(255, 255, 51, 0.5)' };
     setOptionSquares(newSquares);
   }
 
-  // JAVÍTÁS 2: Drag indításakor megjegyezzük a bábut!
   function onPieceDragBegin(piece, sourceSquare) {
-    setMoveFrom(sourceSquare);
-    getMoveOptions(sourceSquare);
+    const pieceObj = game.get(sourceSquare);
+    if (pieceObj && pieceObj.color === playerColor) {
+      setMoveFrom(sourceSquare);
+      getMoveOptions(sourceSquare);
+    }
   }
 
+  // MÓDOSÍTOTT FÜGGVÉNY: Click & Move kezelése Pre-move esetén is
   function onSquareClick(square) {
     setRightClickedSquares({});
     if (isCompleted || wrongMove) return;
 
-    // Ha ugyanarra a bábura kattint másodszor, levesszük a kijelölést
     if (moveFrom === square) {
       setMoveFrom('');
       setOptionSquares({});
       return;
     }
 
+    const piece = game.get(square);
+
     if (moveFrom) {
-      // Megnézzük, szabályos-e a kattintott lépés
-      const gameCopy = new Chess(game.fen());
-      const move = gameCopy.move({ from: moveFrom, to: square, promotion: 'q' });
-      
-      if (move) {
-        onDrop(moveFrom, square); // Ha igen, rábízzuk az onDrop-ra a végrehajtást
-        return;
+      if (isBotMoving) {
+        const preMoves = getPremoveOptions(moveFrom);
+        if (preMoves.some(m => m.to === square)) {
+          onDrop(moveFrom, square);
+          return;
+        }
+      } else {
+        const gameCopy = new Chess(game.fen());
+        let move = null;
+        try { move = gameCopy.move({ from: moveFrom, to: square, promotion: 'q' }); } catch(e) {}
+        if (move) {
+          onDrop(moveFrom, square);
+          return;
+        }
       }
-      
-      const piece = game.get(square);
-      if (piece && piece.color === game.turn()) {
+
+      // Ha illegális lépés volt, de saját bábura kattintottunk, kijelöljük azt
+      if (piece && piece.color === playerColor) {
         setMoveFrom(square);
         if (settings?.showLegalMoves !== false) getMoveOptions(square);
       } else {
@@ -140,8 +209,7 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
         setOptionSquares({});
       }
     } else {
-      const piece = game.get(square);
-      if (piece && piece.color === game.turn()) {
+      if (piece && piece.color === playerColor) {
         setMoveFrom(square);
         if (settings?.showLegalMoves !== false) getMoveOptions(square);
       } else {
@@ -197,23 +265,34 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
   }
 
   function onDrop(source, target) {
-    // JAVÍTÁS 2: Ha ugyanoda tette vissza a bábut, kijelölve hagyjuk!
     if (source === target) {
       setMoveFrom(source);
       if (settings?.showLegalMoves !== false) getMoveOptions(source);
       return false;
     }
 
-    setOptionSquares({}); 
-    setMoveFrom(''); // Ha tényleg lépett, töröljük a kijelölést
-
-    if (isCompleted || wrongMove) return false;
+    if (isCompleted || wrongMove) {
+      setOptionSquares({}); setMoveFrom(''); return false;
+    }
     
     if (isBotMoving) {
-      preMoveRef.current = { source, target };
-      setPreMoveVisual({ source, target });
-      return true; 
+      const preMoves = getPremoveOptions(source);
+      const isValidPreMove = preMoves.some(m => m.to === target);
+      
+      if (isValidPreMove) {
+        setOptionSquares({}); setMoveFrom('');
+        preMoveRef.current = { source, target };
+        setPreMoveVisual({ source, target });
+        return true; 
+      } else {
+        // Ha illegális a pre-move, visszadobjuk és újra kijelöljük
+        setMoveFrom(source);
+        if (settings?.showLegalMoves !== false) getMoveOptions(source);
+        return false;
+      }
     }
+
+    setOptionSquares({}); setMoveFrom('');
     return executeUserMove(source, target, game, history, lépésIndex);
   }
 
@@ -240,6 +319,7 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
           const pm = preMoveRef.current;
           preMoveRef.current = null;
           setPreMoveVisual(null);
+          // Futtatjuk a premove-ot a gép lépése után
           executeUserMove(pm.source, pm.target, newGame, finalHistory, newIndex);
         }
       }, settings.botDelay);
