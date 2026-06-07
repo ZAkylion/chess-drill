@@ -79,7 +79,43 @@ export const translations = {
     freqCol: "Gyakoriság",
     authorCol: "Szerző",
     resetBtn: "🔄 Alaphelyzet",
-    continueVarBtn: "Tovább a változatba ➡️"
+    continueVarBtn: "Tovább a változatba ➡️",
+
+    // Courses.jsx
+    coursesTitle: "📚 Kurzusok (Közösségi Mappák)",
+    loginToBuildRepertoire: "Jelentkezz be a repertoárépítéshez!",
+    officialCourse: "⭐ Hivatalos Kurzus",
+    createdBy: "Létrehozta:",
+    defaultUser: "Felhasználó",
+    variationsLabel: "Variációk:",
+    pcs: "db",
+    processing: "⏳ Feldolgozás...",
+    inRepertoire: "✅ Repertoárban",
+    addToRepertoire: "➕ Hozzáadás",
+    noCoursesAvailable: "Nincs elérhető kurzus.",
+    alertLoginRequired: "Be kell jelentkezned a repertoár építéséhez!",
+    errorDeleteDenied: "Az adatbázis megtagadta a törlést!",
+    errorSaveDenied: "Az adatbázis megtagadta a mentést!",
+    errorOperationFailed: "Művelet sikertelen: ",
+
+    // Profile.jsx & Auth
+    profileTitle: "👤 Profilom",
+    logoutBtn: "Kijelentkezés",
+    usernameLabel: "Felhasználónév",
+    emailLabel: "Email cím",
+    notProvided: "Nincs megadva",
+    welcomeAuth: "👋 Üdvözlünk!",
+    authPrompt: "Jelentkezz be, vagy regisztrálj a Chess Drill Master használatához!",
+    usernamePlaceholder: "Felhasználónév (regisztrációhoz)",
+    emailPlaceholder: "Email cím",
+    passwordPlaceholder: "Jelszó (min. 6 karakter)",
+    loginBtn: "Belépés",
+    registerBtn: "Regisztráció",
+    loadingDots: "...",
+    errorLogin: "Hiba a belépésnél: ",
+    missingUsername: "Kérlek adj meg egy felhasználónevet!",
+    errorRegister: "Hiba a regisztrációnál: ",
+    successRegister: "Sikeres regisztráció! Most már be tudsz lépni."
   },
   en: {
     // App.jsx (Főoldal)
@@ -161,6 +197,42 @@ export const translations = {
     freqCol: "Frequency",
     authorCol: "Author",
     resetBtn: "🔄 Reset",
-    continueVarBtn: "Continue Variation ➡️"
+    continueVarBtn: "Continue Variation ➡️",
+
+    // Courses.jsx
+    coursesTitle: "📚 Courses (Community Folders)",
+    loginToBuildRepertoire: "Log in to build your repertoire!",
+    officialCourse: "⭐ Official Course",
+    createdBy: "Created by:",
+    defaultUser: "User",
+    variationsLabel: "Variations:",
+    pcs: "pcs",
+    processing: "⏳ Processing...",
+    inRepertoire: "✅ In Repertoire",
+    addToRepertoire: "➕ Add to Repertoire",
+    noCoursesAvailable: "No courses available.",
+    alertLoginRequired: "You must be logged in to build a repertoire!",
+    errorDeleteDenied: "The database denied the deletion!",
+    errorSaveDenied: "The database denied the save!",
+    errorOperationFailed: "Operation failed: ",
+
+    // Profile.jsx & Auth
+    profileTitle: "👤 My Profile",
+    logoutBtn: "Log out",
+    usernameLabel: "Username",
+    emailLabel: "Email address",
+    notProvided: "Not provided",
+    welcomeAuth: "👋 Welcome!",
+    authPrompt: "Log in or register to use Chess Drill Master!",
+    usernamePlaceholder: "Username (for registration)",
+    emailPlaceholder: "Email address",
+    passwordPlaceholder: "Password (min. 6 characters)",
+    loginBtn: "Log in",
+    registerBtn: "Register",
+    loadingDots: "...",
+    errorLogin: "Login error: ",
+    missingUsername: "Please provide a username!",
+    errorRegister: "Registration error: ",
+    successRegister: "Successful registration! You can now log in."
   }
 };

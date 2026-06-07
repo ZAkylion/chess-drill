@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './supabaseClient';
+import { translations } from './translations'; // ÚJ IMPORT
 
-export default function Courses({ onBack, session, isAdmin }) {
+export default function Courses({ onBack, session, isAdmin, settings }) { // ÚJ: settings prop
   const [drillLista, setDrillLista] = useState([]);
   const [myRepertoire, setMyRepertoire] = useState([]);
   const [loadingKategoria, setLoadingKategoria] = useState(null);
+
+  // ÚJ: Aktuális nyelv beállítása
+  const lang = settings?.language || 'hu';
+  const t = translations[lang];
 
   useEffect(() => { 
     fetchList(); 
@@ -12,7 +17,6 @@ export default function Courses({ onBack, session, isAdmin }) {
   }, [session]);
 
   async function fetchList() {
-    // KULCS VÁLTOZÁS: Lekérünk mindent, és NINCS többé szűrés! Mindenki lát mindent.
     const { data, error } = await supabase.from('variaciok').select('*');
     if (error) {
       console.error("Hiba a kurzusok lekérésekor:", error);
@@ -35,7 +39,7 @@ export default function Courses({ onBack, session, isAdmin }) {
   }
 
   async function toggleRepertoire(kategoria) {
-    if (!session) return alert('Be kell jelentkezned a repertoár építéséhez!');
+    if (!session) return alert(t.alertLoginRequired);
 
     setLoadingKategoria(kategoria); 
     
@@ -49,7 +53,7 @@ export default function Courses({ onBack, session, isAdmin }) {
           .select(); 
 
         if (error) throw error;
-        if (!data || data.length === 0) throw new Error("Az adatbázis megtagadta a törlést!");
+        if (!data || data.length === 0) throw new Error(t.errorDeleteDenied);
 
         setMyRepertoire(prev => prev.filter(k => k !== kategoria));
         
@@ -60,13 +64,13 @@ export default function Courses({ onBack, session, isAdmin }) {
           .select(); 
 
         if (error) throw error;
-        if (!data || data.length === 0) throw new Error("Az adatbázis megtagadta a mentést!");
+        if (!data || data.length === 0) throw new Error(t.errorSaveDenied);
 
         setMyRepertoire(prev => [...prev, kategoria]);
       }
     } catch (error) {
       console.error("Adatbázis hiba:", error);
-      alert(`Művelet sikertelen: ${error.message}`);
+      alert(`${t.errorOperationFailed}${error.message}`);
     } finally {
       setLoadingKategoria(null); 
     }
@@ -78,7 +82,7 @@ export default function Courses({ onBack, session, isAdmin }) {
       courses[drill.kategoria] = { 
         nev: drill.kategoria, 
         allapot: drill.allapot,
-        szerzo: drill.szerzo_nev === '' ? null : (drill.szerzo_nev || 'Névtelen'), 
+        szerzo: drill.szerzo_nev === '' ? null : (drill.szerzo_nev || t.defaultUser), 
         count: 0
       };
     }
@@ -89,14 +93,14 @@ export default function Courses({ onBack, session, isAdmin }) {
     <div className="center-container" style={{ maxWidth: '700px' }}>
       
       <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '20px' }}>
-        <button className="btn-outline" onClick={onBack}>⬅️ Vissza a főmenübe</button>
+        <button className="btn-outline" onClick={onBack}>{t.backToMenu}</button>
       </div>
       
       <div style={{ textAlign: 'center', marginBottom: '30px' }}>
-        <h2 style={{ color: 'var(--primary-blue)', margin: '0 0 10px 0' }}>📚 Kurzusok (Közösségi Mappák)</h2>
+        <h2 style={{ color: 'var(--primary-blue)', margin: '0 0 10px 0' }}>{t.coursesTitle}</h2>
       </div>
       
-      {!session && <p style={{ color: '#EF4444', fontWeight: 'bold', textAlign: 'center' }}>Jelentkezz be a repertoárépítéshez!</p>}
+      {!session && <p style={{ color: '#EF4444', fontWeight: 'bold', textAlign: 'center' }}>{t.loginToBuildRepertoire}</p>}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '20px' }}>
         {Object.values(courses)
@@ -113,12 +117,12 @@ export default function Courses({ onBack, session, isAdmin }) {
                 </h3>
                 
                 {c.allapot === 'alap' ? (
-                  <span style={{ display: 'inline-block', margin: '5px 0', background: '#FEF3C7', color: '#D97706', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>⭐ Hivatalos Kurzus</span>
+                  <span style={{ display: 'inline-block', margin: '5px 0', background: '#FEF3C7', color: '#D97706', padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 'bold' }}>{t.officialCourse}</span>
                 ) : (
-                  <p style={{ margin: '5px 0', fontSize: '14px', color: 'var(--text-light)' }}>Létrehozta: <strong>{c.szerzo || 'Felhasználó'}</strong></p>
+                  <p style={{ margin: '5px 0', fontSize: '14px', color: 'var(--text-light)' }}>{t.createdBy} <strong>{c.szerzo || t.defaultUser}</strong></p>
                 )}
                 
-                <p style={{ fontSize: '14px', color: 'var(--text-light)' }}>Variációk: <strong>{c.count} db</strong></p>
+                <p style={{ fontSize: '14px', color: 'var(--text-light)' }}>{t.variationsLabel} <strong>{c.count} {t.pcs}</strong></p>
               </div>
               
               <button 
@@ -127,14 +131,14 @@ export default function Courses({ onBack, session, isAdmin }) {
                 disabled={isLoading}
                 style={{ width: '100%', opacity: isLoading ? 0.7 : 1 }}
               >
-                {isLoading ? '⏳ Feldolgozás...' : (isAdded ? '✅ Repertoárban' : '➕ Hozzáadás')}
+                {isLoading ? t.processing : (isAdded ? t.inRepertoire : t.addToRepertoire)}
               </button>
             </div>
           );
         })}
       </div>
       
-      {Object.values(courses).length === 0 && <p style={{ textAlign: 'center' }}>Nincs elérhető kurzus.</p>}
+      {Object.values(courses).length === 0 && <p style={{ textAlign: 'center' }}>{t.noCoursesAvailable}</p>}
     </div>
   );
 }
