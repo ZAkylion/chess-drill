@@ -358,17 +358,38 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
   const customArrows = hintLevel === 2 && hintMove ? [[hintMove.from, hintMove.to, 'rgba(59, 130, 246, 0.8)']] : [];
 
   return (
-    <div style={{ maxWidth: '900px', margin: '40px auto', fontFamily: 'sans-serif' }}>
+    <div style={{
+      position: 'fixed', // Képernyőhöz rögzítve, kizárja a görgetést
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      background: 'linear-gradient(135deg, #F0F4F8 0%, #E2ECF6 100%)', // App háttérszíne
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      overflow: 'hidden', // Görgetés letiltása
+      zIndex: 1000,
+      fontFamily: 'sans-serif',
+      padding: '20px',
+      boxSizing: 'border-box'
+    }}>
       
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', width: '500px', margin: '0 auto 20px auto' }}>
-        <button className="btn-outline" onClick={onBack}>{t.backBtn}</button>
-        <strong>DRILL {currentIndex + 1} / {totalDrills}</strong>
+      {/* FEJLÉC: Vissza gomb és Progress indikátor */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '700px', marginBottom: '20px' }}>
+        <button className="btn-outline" onClick={onBack} style={{ background: 'var(--white)' }}>{t.backBtn}</button>
+        <strong style={{ fontSize: '1.2rem', color: 'var(--primary-blue)', background: 'var(--white)', padding: '10px 20px', borderRadius: '8px', boxShadow: 'var(--shadow-sm)' }}>
+          DRILL {currentIndex + 1} / {totalDrills}
+        </strong>
       </div>
 
-      <div style={{ display: 'flex', gap: '20px', justifyContent: 'center', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+      {/* FŐ TARTALOM: Tábla és Panel */}
+      <div style={{ display: 'flex', gap: '30px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', width: '100%', maxWidth: '1200px' }}>
         
-        <div style={{ width: '500px', textAlign: 'center' }}>
-          <div style={{ boxShadow: 'var(--shadow-md)', borderRadius: '4px', overflow: 'hidden' }}>
+        {/* SAKKTÁBLA KONTÉNER (Dinamikusan a lehető legnagyobb) */}
+        <div style={{ width: 'min(90vw, 65vh)', maxWidth: '700px', textAlign: 'center' }}>
+          <div style={{ boxShadow: 'var(--shadow-md)', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--white)' }}>
             <Chessboard 
               position={getVisualPosition()} 
               onPieceDrop={onDrop} 
@@ -391,19 +412,19 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
                 className="btn-outline" 
                 onClick={handlePrev} 
                 disabled={lépésIndex === 0 || isBotMoving || wrongMove}
-                style={{ padding: '8px 20px', opacity: (lépésIndex === 0 || isBotMoving || wrongMove) ? 0.5 : 1, cursor: (lépésIndex === 0 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer' }}
+                style={{ padding: '8px 20px', background: 'var(--white)', opacity: (lépésIndex === 0 || isBotMoving || wrongMove) ? 0.5 : 1, cursor: (lépésIndex === 0 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer' }}
               >◀️</button>
               <button 
                 className="btn-outline" 
                 onClick={handleNext} 
                 disabled={lépésIndex === history.length - 1 || isBotMoving || wrongMove}
-                style={{ padding: '8px 20px', opacity: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 0.5 : 1, cursor: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer' }}
+                style={{ padding: '8px 20px', background: 'var(--white)', opacity: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 0.5 : 1, cursor: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer' }}
               >▶️</button>
             </div>
           )}
           
           {!isCompleted && (
-            <div className="card" style={{ marginTop: '20px', padding: '15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
+            <div className="card" style={{ marginTop: '15px', padding: '10px 15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
               <p style={{ margin: 0, height: '20px', fontWeight: 'bold', color: hintLevel > 0 ? 'var(--primary-blue)' : 'transparent' }}>
                 {hintLevel === 1 && t.hintMovePiece}
                 {hintLevel === 2 && t.hintFollowArrow}
@@ -420,6 +441,7 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
           )}
         </div>
 
+        {/* EREDMÉNY PANEL (Ha végzett a drillel) */}
         {isCompleted && (
           <div style={{ width: '300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
             {drill.megjegyzes && (
