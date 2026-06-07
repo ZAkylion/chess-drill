@@ -23,7 +23,9 @@ function App() {
     return {
       botDelay: parsed.botDelay ?? 500,
       boardTheme: parsed.boardTheme || 'classic',
-      pieceStyle: parsed.pieceStyle || 'default'
+      pieceStyle: parsed.pieceStyle || 'default',
+      showCoordinates: parsed.showCoordinates ?? true
+      showLegalMoves: parsed.showLegalMoves ?? true
     };
   });
 

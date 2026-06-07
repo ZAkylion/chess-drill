@@ -78,6 +78,32 @@ export default function Settings({ onBack, settings, setSettings }) {
             </select>
           </div>
 
+          {/* Tábla koordináták kapcsoló */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', background: '#F9FAFB', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+            <label style={{ fontWeight: 'bold', color: 'var(--text-dark)', cursor: 'pointer', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span>🔢 Tábla koordináták (A-H, 1-8)</span>
+            </label>
+            <input 
+              type="checkbox" 
+              checked={settings.showCoordinates ?? true}
+              onChange={(e) => handleChange('showCoordinates', e.target.checked)}
+              style={{ width: '20px', height: '20px', cursor: 'pointer', accentColor: 'var(--primary-blue)' }}
+            />
+          </div>
+
+          {/* ÚJ: Legális lépések mutatása kapcsoló */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px', background: '#F9FAFB', borderRadius: '8px', border: '1px solid #E5E7EB' }}>
+            <label style={{ fontWeight: 'bold', color: 'var(--text-dark)', cursor: 'pointer', margin: 0, display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <span>🎯 Legális lépések mutatása (Pöttyök)</span>
+            </label>
+            <input 
+              type="checkbox" 
+              checked={settings.showLegalMoves ?? true}
+              onChange={(e) => handleChange('showLegalMoves', e.target.checked)}
+              style={{ width: '20px', height: '20px', cursor: 'pointer', accentColor: 'var(--primary-blue)' }}
+            />
+          </div>
+
         </div>
 
         {/* Előnézet szekció */}
@@ -90,6 +116,7 @@ export default function Settings({ onBack, settings, setSettings }) {
               customDarkSquareStyle={{ backgroundColor: boardThemes[settings.boardTheme]?.dark }}
               customLightSquareStyle={{ backgroundColor: boardThemes[settings.boardTheme]?.light }}
               customPieces={previewPieces}
+              showBoardNotation={settings.showCoordinates ?? true}
               animationDuration={200}
             />
           </div>

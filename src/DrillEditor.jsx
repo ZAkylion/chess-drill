@@ -14,6 +14,9 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
   const [lépésIndex, setLépésIndex] = useState(0);
   const [history, setHistory] = useState([{ fen: new Chess().fen(), lastMove: null }]);
 
+  // ÚJ: Legális lépések vizualizációja
+  const [optionSquares, setOptionSquares] = useState({});
+
   const customPieces = useMemo(() => getCustomPieces(settings?.pieceStyle), [settings?.pieceStyle]);
 
   const editorArrows = useMemo(() => {
@@ -60,6 +63,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
     setGame(tempGame);
     setHistory(newHistory);
     setLépésIndex(newHistory.length - 1);
+    setOptionSquares({});
   }
 
   function resetEditor() {
@@ -67,12 +71,65 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
     setEditKategoria('Általános');
     setHistory([{ fen: new Chess().fen(), lastMove: null }]); 
     setLépésIndex(0);
+    setOptionSquares({});
   }
 
-  function handlePrev() { if (lépésIndex > 0) { setLépésIndex(lépésIndex - 1); setGame(new Chess(history[lépésIndex - 1].fen)); } }
-  function handleNext() { if (lépésIndex < history.length - 1) { setLépésIndex(lépésIndex + 1); setGame(new Chess(history[lépésIndex + 1].fen)); } }
+  function handlePrev() { 
+    if (lépésIndex > 0) { 
+      setLépésIndex(lépésIndex - 1); 
+      setGame(new Chess(history[lépésIndex - 1].fen)); 
+      setOptionSquares({});
+    } 
+  }
+  
+  function handleNext() { 
+    if (lépésIndex < history.length - 1) { 
+      setLépésIndex(lépésIndex + 1); 
+      setGame(new Chess(history[lépésIndex + 1].fen)); 
+      setOptionSquares({});
+    } 
+  }
+
+  // --- Legális lépések számítása ---
+  function getMoveOptions(square) {
+    if (settings?.showLegalMoves === false) return;
+
+    const moves = game.moves({ square, verbose: true });
+    if (moves.length === 0) {
+      setOptionSquares({});
+      return;
+    }
+
+    const newSquares = {};
+    moves.forEach((m) => {
+      const isCapture = game.get(m.to) && game.get(m.to).color !== game.get(square).color;
+      newSquares[m.to] = {
+        background: isCapture 
+          ? 'radial-gradient(transparent 0%, transparent 74%, rgba(0,0,0,.2) 75%)'
+          : 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)',
+        borderRadius: '50%'
+      };
+    });
+    newSquares[square] = { background: 'rgba(255, 255, 51, 0.5)' };
+    setOptionSquares(newSquares);
+  }
+
+  function onPieceDragBegin(piece, sourceSquare) {
+    getMoveOptions(sourceSquare);
+  }
+
+  function onSquareClick(square) {
+    if (settings?.showLegalMoves === false) return;
+    const piece = game.get(square);
+    if (piece && piece.color === game.turn()) {
+      getMoveOptions(square);
+    } else {
+      setOptionSquares({});
+    }
+  }
 
   function onDrop(source, target) {
+    setOptionSquares({});
     const gameCopy = new Chess(game.fen());
     const move = gameCopy.move({ from: source, to: target, promotion: 'q' });
     if (move) { 
@@ -100,7 +157,6 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
       user_id: session.user.id 
     }, { onConflict: 'nev', ignoreDuplicates: true });
     
-    // Kinyerjük a felhasználó nevét (vagy az email címe elejét, ha nincs megadva felhasználónév)
     const userName = session?.user?.user_metadata?.username || session?.user?.email?.split('@')[0] || 'Felhasználó';
 
     const payload = { 
@@ -109,7 +165,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
       lepesek: editLepesek.join(','), 
       user_id: session.user.id,
       allapot: mappaAllapot,
-      szerzo_nev: userName // <--- EZT ADTUK HOZZÁ A MENTÉSHEZ
+      szerzo_nev: userName
     };
     
     if (editingDrillNev) await supabase.from('variaciok').update(payload).eq('nev', editingDrillNev);
@@ -118,6 +174,15 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
     fetchList(); 
     resetEditor();
   }
+
+  const lastMove = history[lépésIndex]?.lastMove;
+  const moveSquares = lastMove ? { 
+    [lastMove.from]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' }, 
+    [lastMove.to]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } 
+  } : {};
+
+  // Stílusok összevonása
+  const customSquareStyles = { ...moveSquares, ...optionSquares };
 
   return (
     <div className="center-container">
@@ -136,13 +201,19 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
           style={{ marginBottom: '20px' }}
         />
         
-        <div style={{ maxWidth: '440px', margin: '0 auto' }}>
+        <div style={{ maxWidth: '440px', margin: '0 auto', boxShadow: 'var(--shadow-md)', borderRadius: '4px', overflow: 'hidden' }}>
           <Chessboard 
             position={game.fen()} 
             onPieceDrop={onDrop} 
+            onPieceDragBegin={onPieceDragBegin}
+            onSquareClick={onSquareClick}
             customArrows={editorArrows} 
             customArrowColor="rgba(76, 175, 80, 0.8)" 
             customPieces={customPieces}
+            customDarkSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.dark }}
+            customLightSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.light }}
+            showBoardNotation={settings?.showCoordinates ?? true}
+            customSquareStyles={customSquareStyles}
           />
         </div>
 

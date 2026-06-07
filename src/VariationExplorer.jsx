@@ -12,13 +12,15 @@ export default function VariationExplorer({ onBack, settings }) {
   const [fen, setFen] = useState(game.fen());
   const [activeMove, setActiveMove] = useState(null);
   
-  // ÚJ ÁLLAPOTOK A NAVIGÁCIÓHOZ
   const [moveHistory, setMoveHistory] = useState([]);
   const [moveIndex, setMoveIndex] = useState(0);
 
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [arrows, setArrows] = useState([]);
+
+  // ÚJ: Legális lépések vizualizációja
+  const [optionSquares, setOptionSquares] = useState({});
 
   const customPieces = useMemo(() => getCustomPieces(settings?.pieceStyle), [settings?.pieceStyle]);
   const darkSquareStyle = { backgroundColor: boardThemes[settings?.boardTheme || 'blue']?.dark };
@@ -41,7 +43,6 @@ export default function VariationExplorer({ onBack, settings }) {
     fetchAllCourses();
   }, []);
 
-  // SEGÉDFÜGGVÉNY: Újraépíti a táblát egy adott lépéslistából
   const rebuildGame = useCallback((moves) => {
     const newGame = new Chess();
     for (const m of moves) {
@@ -49,9 +50,9 @@ export default function VariationExplorer({ onBack, settings }) {
     }
     setGame(newGame);
     setFen(newGame.fen());
+    setOptionSquares({});
   }, []);
 
-  // VISSZA LÉPÉS
   const handlePrev = useCallback(() => {
     if (moveIndex > 0) {
       const newIdx = moveIndex - 1;
@@ -61,7 +62,6 @@ export default function VariationExplorer({ onBack, settings }) {
     }
   }, [moveIndex, moveHistory, rebuildGame]);
 
-  // ELŐRE LÉPÉS
   const handleNext = useCallback(() => {
     if (moveIndex < moveHistory.length) {
       const newIdx = moveIndex + 1;
@@ -71,7 +71,6 @@ export default function VariationExplorer({ onBack, settings }) {
     }
   }, [moveIndex, moveHistory, rebuildGame]);
 
-  // BILLENTYŰZET FIGYELŐ
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowLeft') handlePrev();
@@ -81,7 +80,6 @@ export default function VariationExplorer({ onBack, settings }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handlePrev, handleNext]);
 
-  // NYILAK KISZÁMÍTÁSA
   useEffect(() => {
     const currentBaseFen = getBaseFen(game.fen());
     const newArrows = [];
@@ -127,14 +125,52 @@ export default function VariationExplorer({ onBack, settings }) {
     setArrows(newArrows);
   }, [fen, selectedCourse, courses, game]); 
 
+  // --- Legális lépések számítása ---
+  function getMoveOptions(square) {
+    if (settings?.showLegalMoves === false) return;
+
+    const moves = game.moves({ square, verbose: true });
+    if (moves.length === 0) {
+      setOptionSquares({});
+      return;
+    }
+
+    const newSquares = {};
+    moves.forEach((m) => {
+      const isCapture = game.get(m.to) && game.get(m.to).color !== game.get(square).color;
+      newSquares[m.to] = {
+        background: isCapture 
+          ? 'radial-gradient(transparent 0%, transparent 74%, rgba(0,0,0,.2) 75%)'
+          : 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)',
+        borderRadius: '50%'
+      };
+    });
+    newSquares[square] = { background: 'rgba(255, 255, 51, 0.5)' };
+    setOptionSquares(newSquares);
+  }
+
+  function onPieceDragBegin(piece, sourceSquare) {
+    getMoveOptions(sourceSquare);
+  }
+
+  function onSquareClick(square) {
+    if (settings?.showLegalMoves === false) return;
+    const piece = game.get(square);
+    if (piece && piece.color === game.turn()) {
+      getMoveOptions(square);
+    } else {
+      setOptionSquares({});
+    }
+  }
+
   function onDrop(sourceSquare, targetSquare) {
+    setOptionSquares({});
     try {
       const testGame = new Chess(game.fen());
       const move = testGame.move({ from: sourceSquare, to: targetSquare, promotion: 'q' });
 
       if (!move) return false;
       
-      // Ha manuálisan lépünk, levágjuk a jövőbeli (előre léphető) előzményeket!
       const newHistory = [...moveHistory.slice(0, moveIndex), move.san];
       setMoveHistory(newHistory);
       setMoveIndex(newHistory.length);
@@ -150,8 +186,6 @@ export default function VariationExplorer({ onBack, settings }) {
 
   function playMoveSequence(lepesekString, targetIndex, drillId) {
     const moves = lepesekString.split(',').map(m => m.trim()).filter(Boolean);
-    
-    // Betöltjük a TELJES variációt a memóriába, de a táblát csak a kattintott pontig építjük fel
     setMoveHistory(moves);
     setMoveIndex(targetIndex + 1);
     rebuildGame(moves.slice(0, targetIndex + 1));
@@ -163,6 +197,7 @@ export default function VariationExplorer({ onBack, settings }) {
     setMoveIndex(0);
     rebuildGame([]);
     setActiveMove(null);
+    setOptionSquares({});
   }
 
   const filteredCourses = courses.filter(c => {
@@ -200,10 +235,14 @@ export default function VariationExplorer({ onBack, settings }) {
           <Chessboard 
             position={fen} 
             onPieceDrop={onDrop}
+            onPieceDragBegin={onPieceDragBegin}
+            onSquareClick={onSquareClick}
             customDarkSquareStyle={darkSquareStyle}
             customLightSquareStyle={lightSquareStyle}
             customPieces={customPieces} 
             customArrows={arrows} 
+            showBoardNotation={settings?.showCoordinates ?? true}
+            customSquareStyles={optionSquares}
             animationDuration={200}
           />
           
