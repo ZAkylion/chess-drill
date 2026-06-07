@@ -35,6 +35,75 @@ export default function VariationExplorer({ onBack, settings }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lépésIndex, history]);
 
+  // ÚJ 1: Létrehozunk egy globális Pozíció Térképet (Position Map) az összes variációból
+  const positionMap = useMemo(() => {
+    const map = {};
+    const exact = {};
+
+    allVariations.forEach(drill => {
+      const tempGame = new Chess();
+      const moves = drill.lepesek.split(',');
+
+      // Az első 4 szegmens a FEN-ből (bábuk, lépésjog, sánc, en passant)
+      let currentBaseFen = tempGame.fen().split(' ').slice(0, 4).join(' ');
+
+      moves.forEach((moveSan) => {
+        // Regisztráljuk, hogy ebből a pozícióból ez a lépés elérhető
+        if (!map[currentBaseFen]) map[currentBaseFen] = {};
+        if (!map[currentBaseFen][moveSan]) map[currentBaseFen][moveSan] = { count: 0, authors: new Set() };
+        
+        map[currentBaseFen][moveSan].count++;
+        map[currentBaseFen][moveSan].authors.add(drill.szerzo_nev);
+
+        // Lépünk a táblán, hogy megkapjuk a következő FEN-t
+        try {
+          tempGame.move(moveSan);
+          currentBaseFen = tempGame.fen().split(' ').slice(0, 4).join(' ');
+        } catch (e) {
+          console.warn("Hibás lépés a variációban:", drill.nev, moveSan);
+        }
+      });
+
+      // Amikor a variáció véget ér, feljegyezzük, hogy ez egy "kifutó" pozíció
+      if (!exact[currentBaseFen]) exact[currentBaseFen] = [];
+      exact[currentBaseFen].push(drill);
+    });
+
+    return { map, exact };
+  }, [allVariations]);
+
+  // ÚJ 2: Az elérhető lépéseket a Position Map-ből olvassuk ki a jelenlegi pozíció alapján (Transzpozíciók felismerése)
+  const elerhetoLepesek = useMemo(() => {
+    // Levágjuk a jelenlegi állásból a lépésszámlálókat, hogy csak a tiszta pozíciót vizsgáljuk
+    const currentBaseFen = game.fen().split(' ').slice(0, 4).join(' ');
+
+    const nextMovesData = positionMap.map[currentBaseFen] || {};
+    const exactMatches = positionMap.exact[currentBaseFen] || [];
+
+    const options = Object.entries(nextMovesData).map(([san, data]) => ({
+      san,
+      count: data.count,
+      authors: Array.from(data.authors).join(', ')
+    })).sort((a, b) => b.count - a.count);
+
+    return { options, exactMatches };
+  }, [positionMap, game.fen()]);
+
+  // ÚJ 3: Nyilak generálása az ELÉRHETŐ lépések alapján (Már transzpozíciót is kezeli)
+  const explorerArrows = useMemo(() => {
+    const arrows = [];
+    elerhetoLepesek.options.forEach(opt => {
+      const tempGame = new Chess(game.fen());
+      try {
+        const move = tempGame.move(opt.san);
+        if (move) {
+          arrows.push([move.from, move.to]);
+        }
+      } catch (e) {}
+    });
+    return arrows;
+  }, [elerhetoLepesek, game.fen()]);
+
   function getMoveOptions(square) {
     if (settings?.showLegalMoves === false) return;
     const moves = game.moves({ square, verbose: true });
@@ -146,41 +215,6 @@ export default function VariationExplorer({ onBack, settings }) {
     setMoveFrom('');
   }
 
-  const elerhetoLepesek = useMemo(() => {
-    const currentMovesSan = history.slice(1, lépésIndex + 1).map(h => {
-      const temp = new Chess(history[history.indexOf(h)-1].fen);
-      const m = temp.move({ from: h.lastMove.from, to: h.lastMove.to, promotion: 'q' });
-      return m.san;
-    }).join(',');
-
-    const matchStats = {};
-    const exactMatches = [];
-
-    allVariations.forEach(drill => {
-      if (lépésIndex === 0 || drill.lepesek.startsWith(currentMovesSan)) {
-        if (drill.lepesek === currentMovesSan) {
-          exactMatches.push(drill);
-        } else {
-          const mArr = drill.lepesek.split(',');
-          const nextSan = mArr[lépésIndex];
-          if (nextSan) {
-            if (!matchStats[nextSan]) matchStats[nextSan] = { count: 0, authors: new Set() };
-            matchStats[nextSan].count++;
-            matchStats[nextSan].authors.add(drill.szerzo_nev);
-          }
-        }
-      }
-    });
-
-    const options = Object.entries(matchStats).map(([san, data]) => ({
-      san,
-      count: data.count,
-      authors: Array.from(data.authors).join(', ')
-    })).sort((a, b) => b.count - a.count);
-
-    return { options, exactMatches };
-  }, [allVariations, history, lépésIndex]);
-
   const lastMove = history[lépésIndex]?.lastMove;
   const moveSquares = lastMove ? { [lastMove.from]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' }, [lastMove.to]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
   const clickSelectStyle = moveFrom ? { [moveFrom]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
@@ -204,6 +238,8 @@ export default function VariationExplorer({ onBack, settings }) {
               onPieceDragBegin={onPieceDragBegin}
               onSquareClick={onSquareClick}
               customPieces={customPieces}
+              customArrows={explorerArrows}
+              customArrowColor="rgba(76, 175, 80, 0.6)"
               customDarkSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.dark }}
               customLightSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.light }}
               showBoardNotation={settings?.showCoordinates ?? true}
