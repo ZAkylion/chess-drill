@@ -73,8 +73,8 @@ export default function DrillPlayer({ onBack, session, settings }) {
   if (finished) {
     const osszHiba = results.reduce((acc, curr) => acc + curr.hibak, 0);
     return (
-      <div className="center-container" style={{ textAlign: 'center' }}>
-        <div className="card">
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100%', padding: '20px', boxSizing: 'border-box' }}>
+        <div className="card" style={{ width: '100%', maxWidth: '500px', textAlign: 'center' }}>
           <h2 style={{ color: 'var(--primary-blue)' }}>{t.practiceEnd}</h2>
           <p style={{ fontSize: '18px' }}>{t.totalDrills} <strong>{playingDrills.length}</strong></p>
           <p style={{ fontSize: '18px' }}>{t.mistakesCount} <strong style={{ color: osszHiba > 0 ? '#DC2626' : '#059669' }}>{osszHiba}</strong></p>
@@ -88,51 +88,54 @@ export default function DrillPlayer({ onBack, session, settings }) {
   }
 
   return (
-    <div className="center-container" style={{ maxWidth: '600px', textAlign: 'center' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <button className="btn-outline" onClick={onBack}>{t.backToMenu}</button>
-      </div>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100%', padding: '20px', boxSizing: 'border-box' }}>
+      <div style={{ width: '100%', maxWidth: '500px' }}>
+        
+        <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '20px' }}>
+          <button className="btn-outline" onClick={onBack}>{t.backToMenu}</button>
+        </div>
 
-      <div className="card">
-        <h2 style={{ marginTop: 0 }}>{t.startPractice}</h2>
-        {drills.length === 0 ? (
-          <p>{t.selectCoursePrompt}</p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', textAlign: 'left' }}>
-            <div>
-              <label style={{ fontWeight: 'bold', marginBottom: '5px', display: 'block' }}>{t.courseSelectLabel}</label>
-              <select className="input-field" value={selectedKategoria} onChange={(e) => { setSelectedKategoria(e.target.value); setSelectedChapter(''); }}>
-                <option value="">-- {t.chooseCourse} --</option>
-                {kategoriak.map(k => <option key={k} value={k}>{k}</option>)}
-              </select>
-            </div>
-
-            {selectedKategoria && chapters.length > 0 && (
+        <div className="card" style={{ textAlign: 'center' }}>
+          <h2 style={{ marginTop: 0, color: 'var(--primary-blue)' }}>{t.startPractice}</h2>
+          {drills.length === 0 ? (
+            <p>{t.selectCoursePrompt}</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', textAlign: 'left' }}>
               <div>
-                <label style={{ fontWeight: 'bold', marginBottom: '5px', display: 'block' }}>{t.chapterSelectLabel}</label>
-                <select className="input-field" value={selectedChapter} onChange={(e) => setSelectedChapter(e.target.value)}>
-                  <option value="">-- {t.allChapters} --</option>
-                  {chapters.map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                <label style={{ fontWeight: 'bold', marginBottom: '5px', display: 'block' }}>{t.courseSelectLabel}</label>
+                <select className="input-field" value={selectedKategoria} onChange={(e) => { setSelectedKategoria(e.target.value); setSelectedChapter(''); }}>
+                  <option value="">-- {t.chooseCourse} --</option>
+                  {kategoriak.map(k => <option key={k} value={k}>{k}</option>)}
                 </select>
               </div>
-            )}
 
-            <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginTop: '10px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                <input type="radio" checked={isRandom} onChange={() => setIsRandom(true)} style={{ accentColor: 'var(--primary-blue)' }} />
-                {t.shuffleMode}
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                <input type="radio" checked={!isRandom} onChange={() => setIsRandom(false)} style={{ accentColor: 'var(--primary-blue)' }} />
-                {t.sequentialMode}
-              </label>
+              {selectedKategoria && chapters.length > 0 && (
+                <div>
+                  <label style={{ fontWeight: 'bold', marginBottom: '5px', display: 'block' }}>{t.chapterSelectLabel}</label>
+                  <select className="input-field" value={selectedChapter} onChange={(e) => setSelectedChapter(e.target.value)}>
+                    <option value="">-- {t.allChapters} --</option>
+                    {chapters.map(ch => <option key={ch} value={ch}>{ch}</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginTop: '10px' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                  <input type="radio" checked={isRandom} onChange={() => setIsRandom(true)} style={{ accentColor: 'var(--primary-blue)' }} />
+                  {t.shuffleMode}
+                </label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
+                  <input type="radio" checked={!isRandom} onChange={() => setIsRandom(false)} style={{ accentColor: 'var(--primary-blue)' }} />
+                  {t.sequentialMode}
+                </label>
+              </div>
+
+              <button className="btn-primary" onClick={startDrill} disabled={!selectedKategoria} style={{ marginTop: '15px', opacity: !selectedKategoria ? 0.5 : 1 }}>
+                {t.startBtn}
+              </button>
             </div>
-
-            <button className="btn-primary" onClick={startDrill} disabled={!selectedKategoria} style={{ marginTop: '15px', opacity: !selectedKategoria ? 0.5 : 1 }}>
-              {t.startBtn}
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );
