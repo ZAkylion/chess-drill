@@ -80,6 +80,9 @@ export const translations = {
     authorCol: "Szerző",
     resetBtn: "🔄 Alaphelyzet",
     continueVarBtn: "Tovább a változatba ➡️",
+    flipBoardBtn: "🔄 Tábla megfordítása",
+    colorWhite: "Világos",
+    colorBlack: "Sötét",
 
     // Courses.jsx
     coursesTitle: "📚 Kurzusok (Közösségi Mappák)",
@@ -105,6 +108,13 @@ export const translations = {
     clearBtn: "Törlés",
     movesCount: "lépés",
     noCoursesMatch: "Nincs a keresési feltételeknek megfelelő kurzus.",
+    colorLabel: "Szín:",
+    colorFilterAll: "Minden szín",
+    colorFilterWhite: "Világos",
+    colorFilterBlack: "Sötét",
+    whiteOpenings: "⚪ Világos megnyitások",
+    blackOpenings: "⚫ Sötét megnyitások",
+    mixedOpenings: "⚪⚫ Vegyes megnyitások",
 
     // Profile.jsx & Auth
     profileTitle: "👤 Profilom",
@@ -206,6 +216,9 @@ export const translations = {
     authorCol: "Author",
     resetBtn: "🔄 Reset",
     continueVarBtn: "Continue Variation ➡️",
+    flipBoardBtn: "🔄 Flip Board",
+    colorWhite: "White",
+    colorBlack: "Black",
 
     // Courses.jsx
     coursesTitle: "📚 Courses (Community Folders)",
@@ -231,6 +244,13 @@ export const translations = {
     clearBtn: "Clear",
     movesCount: "moves",
     noCoursesMatch: "No courses match the search criteria.",
+    colorLabel: "Color:",
+    colorFilterAll: "All colors",
+    colorFilterWhite: "White",
+    colorFilterBlack: "Black",
+    whiteOpenings: "⚪ White Openings",
+    blackOpenings: "⚫ Black Openings",
+    mixedOpenings: "⚪⚫ Mixed Openings",
 
     // Profile.jsx & Auth
     profileTitle: "👤 My Profile",

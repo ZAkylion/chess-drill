@@ -5,8 +5,12 @@ import { boardThemes, getCustomPieces } from './chessConfig';
 import { translations } from './translations';
 
 export default function DrillGame({ drill, settings, onComplete, onBack, currentIndex, totalDrills }) {
-  const [game, setGame] = useState(new Chess());
   const drillLépések = drill.lepesek.split(',');
+  
+  // 1. JAVÍTÁS: Felhoztuk a szín meghatározását a state-ek elé
+  const playerColor = drill.nev.toLowerCase().includes('black') ? 'b' : 'w';
+
+  const [game, setGame] = useState(new Chess());
   const [lépésIndex, setLépésIndex] = useState(0);
   const [hibák, setHibák] = useState(0);
   const [history, setHistory] = useState([{ fen: new Chess().fen(), lastMove: null }]);
@@ -21,14 +25,28 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
   const [rightClickedSquares, setRightClickedSquares] = useState({});
   const [wrongMove, setWrongMove] = useState(null);
 
-  const [isBotMoving, setIsBotMoving] = useState(false);
+  // 2. JAVÍTÁS: Ha a játékos sötét, a botnak azonnal el kell kezdenie mozogni (true)
+  const [isBotMoving, setIsBotMoving] = useState(playerColor === 'b');
   const [preMoveVisual, setPreMoveVisual] = useState(null);
   const preMoveRef = useRef(null);
 
-  const playerColor = drill.nev.toLowerCase().includes('black') ? 'b' : 'w';
-
   const lang = settings?.language || 'hu';
   const t = translations[lang];
+
+  // 3. JAVÍTÁS: Biztonsági reset figyelő a "Retry" gomb és a drillek közötti tiszta váltás érdekében
+  useEffect(() => {
+    setGame(new Chess());
+    setLépésIndex(0);
+    setHistory([{ fen: new Chess().fen(), lastMove: null }]);
+    setIsCompleted(false);
+    setHibák(0);
+    resetHints();
+    setRightClickedSquares({});
+    setWrongMove(null);
+    setPreMoveVisual(null);
+    preMoveRef.current = null;
+    setIsBotMoving(playerColor === 'b');
+  }, [drill, playerColor]);
 
   const getVisualPosition = () => {
     if (preMoveVisual) {
@@ -55,7 +73,6 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
     setMoveFrom('');
   }
 
-  // JAVÍTÁS: Kivettük a !isCompleted feltételt
   function handlePrev() {
     if (lépésIndex > 0 && !wrongMove && !isBotMoving) {
       const newIdx = lépésIndex - 1;
@@ -68,7 +85,6 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
     }
   }
 
-  // JAVÍTÁS: Kivettük a !isCompleted feltételt
   function handleNext() {
     if (lépésIndex < history.length - 1 && !wrongMove && !isBotMoving) {
       const newIdx = lépésIndex + 1;
@@ -370,9 +386,9 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      justifyContent: 'flex-start', // JAVÍTÁS: Center helyett fentről rögzítjük
-      paddingTop: '6vh', // JAVÍTÁS: Hogy ne másszon rá a képernyő tetejére
-      overflowY: 'auto', // JAVÍTÁS: Mobilokon lehessen görgetni, ha a panel alulra kerül
+      justifyContent: 'flex-start',
+      paddingTop: '6vh',
+      overflowY: 'auto',
       overflowX: 'hidden',
       zIndex: 1000,
       fontFamily: 'sans-serif',
@@ -423,7 +439,7 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
             >▶️</button>
           </div>
           
-          {/* HINT PANEL - JAVÍTÁS: Mindig a DOM-ban van, csak elhalványul, így nem ugrik a tábla */}
+          {/* HINT PANEL */}
           <div className="card" style={{ 
             marginTop: '15px', padding: '10px 15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
             opacity: isCompleted ? 0 : 1, 
@@ -445,7 +461,7 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
           </div>
         </div>
 
-        {/* EREDMÉNY PANEL - JAVÍTÁS: Mindig a DOM-ban van, így a tábla eleve megkapja a végleges pozícióját */}
+        {/* EREDMÉNY PANEL */}
         <div style={{ 
           width: '300px', display: 'flex', flexDirection: 'column', gap: '15px',
           opacity: isCompleted ? 1 : 0,

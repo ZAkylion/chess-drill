@@ -12,9 +12,11 @@ export default function VariationExplorer({ onBack, settings }) {
   const [allVariations, setAllVariations] = useState([]);
   const [optionSquares, setOptionSquares] = useState({});
   const [moveFrom, setMoveFrom] = useState('');
+  
+  const [boardOrientation, setBoardOrientation] = useState('white');
 
   const lang = settings?.language || 'hu';
-  const t = translations[lang];
+  const t = translations[lang] || translations['hu'] || {};
 
   const customPieces = useMemo(() => getCustomPieces(settings?.pieceStyle), [settings?.pieceStyle]);
 
@@ -39,7 +41,12 @@ export default function VariationExplorer({ onBack, settings }) {
     const map = {};
     const exact = {};
 
-    allVariations.forEach(drill => {
+    const filteredVariations = allVariations.filter(drill => {
+      const isBlack = drill.nev && drill.nev.toLowerCase().includes('black');
+      return boardOrientation === 'black' ? isBlack : !isBlack;
+    });
+
+    filteredVariations.forEach(drill => {
       const tempGame = new Chess();
       const moves = drill.lepesek.split(',');
 
@@ -50,7 +57,7 @@ export default function VariationExplorer({ onBack, settings }) {
         if (!map[currentBaseFen][moveSan]) map[currentBaseFen][moveSan] = { count: 0, authors: new Set() };
         
         map[currentBaseFen][moveSan].count++;
-        map[currentBaseFen][moveSan].authors.add(drill.szerzo_nev);
+        map[currentBaseFen][moveSan].authors.add(drill.szerzo_nev || t.defaultUser || 'Felhasználó');
 
         try {
           tempGame.move(moveSan);
@@ -65,7 +72,7 @@ export default function VariationExplorer({ onBack, settings }) {
     });
 
     return { map, exact };
-  }, [allVariations]);
+  }, [allVariations, boardOrientation, t.defaultUser]);
 
   const elerhetoLepesek = useMemo(() => {
     const currentBaseFen = game.fen().split(' ').slice(0, 4).join(' ');
@@ -215,7 +222,7 @@ export default function VariationExplorer({ onBack, settings }) {
   }
 
   function loadVariation(movesStr) {
-    const moves = movesStr.split(',');
+    const moves = movesStr ? movesStr.split(',') : [];
     const tempGame = new Chess();
     const newHistory = [{ fen: tempGame.fen(), lastMove: null }];
     moves.forEach(m => {
@@ -229,6 +236,11 @@ export default function VariationExplorer({ onBack, settings }) {
     setMoveFrom('');
   }
 
+  function flipBoard() {
+    setBoardOrientation(prev => prev === 'white' ? 'black' : 'white');
+    loadVariation('');
+  }
+
   const lastMove = history[lépésIndex]?.lastMove;
   const moveSquares = lastMove ? { [lastMove.from]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' }, [lastMove.to]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
   const clickSelectStyle = moveFrom ? { [moveFrom]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
@@ -237,20 +249,33 @@ export default function VariationExplorer({ onBack, settings }) {
   return (
     <div style={{ maxWidth: '1000px', margin: '40px auto', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <button className="btn-outline" onClick={onBack}>{t.backToMenu}</button>
-        <h2>{t.currentPosition}</h2>
+        <button className="btn-outline" onClick={onBack}>{t.backToMenu || 'Vissza a menübe'}</button>
+        <h2 style={{ color: 'var(--primary-blue)', margin: 0 }}>{t.currentPosition || 'Jelenlegi Állás'}</h2>
+        <div style={{ width: '150px' }}></div>
       </div>
 
       <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', justifyContent: 'center' }}>
         
         {/* Sakktábla */}
         <div style={{ width: '500px' }}>
+          
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
+            <button 
+              className="btn-outline" 
+              onClick={flipBoard}
+              style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', fontSize: '14px' }}
+            >
+              {t.flipBoardBtn || '🔄 Tábla megfordítása'} ({boardOrientation === 'white' ? (t.colorWhite || 'Világos') : (t.colorBlack || 'Sötét')})
+            </button>
+          </div>
+
           <div style={{ boxShadow: 'var(--shadow-md)', borderRadius: '4px', overflow: 'hidden' }}>
             <Chessboard 
               position={game.fen()} 
               onPieceDrop={onDrop}
               onPieceDragBegin={onPieceDragBegin}
               onSquareClick={onSquareClick}
+              boardOrientation={boardOrientation} 
               customPieces={customPieces}
               customArrows={visibleArrows}
               customArrowColor="rgba(76, 175, 80, 0.6)"
@@ -263,25 +288,28 @@ export default function VariationExplorer({ onBack, settings }) {
           <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '15px' }}>
             <button className="btn-outline" onClick={handlePrev} disabled={lépésIndex === 0} style={{ opacity: lépésIndex === 0 ? 0.5 : 1 }}>◀️</button>
             <button className="btn-outline" onClick={handleNext} disabled={lépésIndex === history.length - 1} style={{ opacity: lépésIndex === history.length - 1 ? 0.5 : 1 }}>▶️</button>
-            <button className="btn-outline" onClick={() => loadVariation('')}>{t.resetBtn}</button>
+            <button className="btn-outline" onClick={() => loadVariation('')}>{t.resetBtn || 'Alaphelyzet'}</button>
           </div>
         </div>
 
         {/* Lépések / Változatok listája */}
         <div className="card" style={{ width: '400px', alignSelf: 'flex-start', maxHeight: '550px', overflowY: 'auto' }}>
-          <h3 style={{ marginTop: 0, color: 'var(--primary-blue)', borderBottom: '2px solid #eee', paddingBottom: '10px' }}>
-            {t.availableMoves}
+          <h3 style={{ marginTop: 0, color: 'var(--primary-blue)', borderBottom: '2px solid #eee', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
+            <span>{t.availableMoves || 'Elérhető Lépések'}</span>
+            <span style={{ fontSize: '14px', color: 'var(--text-light)', fontWeight: 'normal', alignSelf: 'flex-end' }}>
+              ({boardOrientation === 'white' ? (t.colorWhite || 'Világos') : (t.colorBlack || 'Sötét')} repertoár)
+            </span>
           </h3>
 
           {elerhetoLepesek.options.length === 0 && elerhetoLepesek.exactMatches.length === 0 ? (
-            <p style={{ color: 'var(--text-light)', textAlign: 'center', marginTop: '20px' }}>{t.noDataExplorer}</p>
+            <p style={{ color: 'var(--text-light)', textAlign: 'center', marginTop: '20px' }}>{t.noDataExplorer || 'Nincs adat ebből az állásból.'}</p>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
               <thead>
                 <tr style={{ background: '#F3F4F6', color: '#374151' }}>
-                  <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>{t.moveCol}</th>
-                  <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #E5E7EB' }}>{t.freqCol}</th>
-                  <th style={{ padding: '10px', textAlign: 'right', borderBottom: '2px solid #E5E7EB' }}>{t.authorCol}</th>
+                  <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #E5E7EB' }}>{t.moveCol || 'Lépés'}</th>
+                  <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #E5E7EB' }}>{t.freqCol || 'Gyakoriság'}</th>
+                  <th style={{ padding: '10px', textAlign: 'right', borderBottom: '2px solid #E5E7EB' }}>{t.authorCol || 'Szerző'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -319,7 +347,7 @@ export default function VariationExplorer({ onBack, settings }) {
               <h4 style={{ color: '#059669', marginBottom: '10px' }}>✅ Ide kifutó teljes variációk:</h4>
               {elerhetoLepesek.exactMatches.map((drill, i) => (
                 <div key={i} style={{ padding: '10px', background: '#ECFDF5', borderRadius: '6px', marginBottom: '8px', border: '1px solid #A7F3D0', fontSize: '14px' }}>
-                  <strong>{drill.nev}</strong> <span style={{ color: '#666', fontSize: '12px' }}>({drill.szerzo_nev})</span>
+                  <strong>{drill.nev}</strong> <span style={{ color: '#666', fontSize: '12px' }}>({drill.szerzo_nev || t.defaultUser})</span>
                 </div>
               ))}
             </div>

@@ -11,6 +11,8 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
   
   const [game, setGame] = useState(new Chess());
   
+  const [boardOrientation, setBoardOrientation] = useState('white');
+  
   const [editKategoria, setEditKategoria] = useState('');
   const [editChapter, setEditChapter] = useState('');
   const [editMegjegyzes, setEditMegjegyzes] = useState(''); 
@@ -25,7 +27,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
   const [moveFrom, setMoveFrom] = useState(''); 
 
   const lang = settings?.language || 'hu';
-  const t = translations[lang];
+  const t = translations[lang] || translations['hu'] || {};
 
   const customPieces = useMemo(() => getCustomPieces(settings?.pieceStyle), [settings?.pieceStyle]);
 
@@ -65,6 +67,10 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
     setEditKategoria(drill.kategoria || '');
     setEditChapter(drill.chapter || ''); 
     setEditMegjegyzes(drill.megjegyzes || ''); 
+    
+    const isBlack = drill.nev.toLowerCase().includes('black');
+    setBoardOrientation(isBlack ? 'black' : 'white');
+
     const moves = drill.lepesek.split(',');
     setEditLepesek(moves);
     const tempGame = new Chess();
@@ -199,13 +205,20 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
   async function saveDrill() {
     if (!editKategoria.trim() || !editChapter.trim()) return alert(t.errorMissingFields);
 
+    let finalName = editingDrillNev;
+    if (!finalName) {
+      const timestamp = Date.now();
+      const colorSuffix = boardOrientation === 'black' ? '(Black)' : '(White)';
+      finalName = `${editKategoria.trim()} - ${timestamp} ${colorSuffix}`;
+    }
+
     const { data: letezoMappa } = await supabase.from('mappak').select('allapot').eq('nev', editKategoria.trim()).single();
     const mappaAllapot = letezoMappa ? letezoMappa.allapot : 'publikus';
     await supabase.from('mappak').upsert({ nev: editKategoria.trim(), allapot: mappaAllapot, user_id: session.user.id }, { onConflict: 'nev', ignoreDuplicates: true });
     
     const userName = session?.user?.user_metadata?.username || session?.user?.email?.split('@')[0] || 'Felhasználó';
     const payload = { 
-      nev: editingDrillNev || `${editKategoria.trim()} - ${Date.now()}`, 
+      nev: finalName, 
       kategoria: editKategoria.trim(), 
       chapter: editChapter.trim(), 
       megjegyzes: editMegjegyzes.trim(),
@@ -237,6 +250,10 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
       fetchList();
       if (editingDrillNev === oldName) setEditingDrillNev(newName.trim()); 
     }
+  }
+
+  function flipBoard() {
+    setBoardOrientation(prev => prev === 'white' ? 'black' : 'white');
   }
 
   const myDrills = isAdmin ? drillLista : drillLista.filter(d => d.user_id === session?.user?.id);
@@ -299,12 +316,23 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
               />
             </div>
             
+            <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
+              <button 
+                className="btn-outline" 
+                onClick={flipBoard}
+                style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '6px 12px', fontSize: '14px' }}
+              >
+                {t.flipBoardBtn || '🔄 Tábla megfordítása'} ({boardOrientation === 'white' ? (t.colorWhite || 'Világos') : (t.colorBlack || 'Sötét')})
+              </button>
+            </div>
+
             <div style={{ maxWidth: '440px', margin: '0 auto', boxShadow: 'var(--shadow-md)', borderRadius: '4px', overflow: 'hidden' }}>
               <Chessboard 
                 position={game.fen()} 
                 onPieceDrop={onDrop} 
                 onPieceDragBegin={onPieceDragBegin}
                 onSquareClick={onSquareClick}
+                boardOrientation={boardOrientation} 
                 customArrows={[...editorArrows]}
                 customArrowColor="rgba(76, 175, 80, 0.8)" 
                 customPieces={customPieces}
@@ -371,7 +399,10 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                           {drills.map(d => (
                             <div key={d.nev} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', padding: '10px 15px', borderRadius: '6px', border: '1px solid #eee' }}>
-                              <span style={{ fontWeight: '500', fontSize: '14px' }}>{d.nev}</span>
+                              <span style={{ fontWeight: '500', fontSize: '14px' }}>
+                                {d.nev.toLowerCase().includes('black') ? '⚫ ' : '⚪ '}
+                                {d.nev}
+                              </span>
                               <div style={{ display: 'flex', gap: '8px' }}>
                                 <button onClick={() => startEditing(d)} style={{ border: 'none', background: '#DBEAFE', color: '#1D4ED8', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>{t.editBtnShort}</button>
                                 <button onClick={() => handleRename(d.nev)} style={{ border: 'none', background: '#FEF3C7', color: '#D97706', padding: '6px 10px', borderRadius: '4px', cursor: 'pointer', fontSize: '12px', fontWeight: 'bold' }}>{t.renameBtn}</button>
