@@ -305,7 +305,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
                 onPieceDrop={onDrop} 
                 onPieceDragBegin={onPieceDragBegin}
                 onSquareClick={onSquareClick}
-                customArrows={editorArrows} 
+                customArrows={[...editorArrows]}
                 customArrowColor="rgba(76, 175, 80, 0.8)" 
                 customPieces={customPieces}
                 customDarkSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.dark }}

@@ -35,7 +35,6 @@ export default function VariationExplorer({ onBack, settings }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lépésIndex, history]);
 
-  // ÚJ 1: Létrehozunk egy globális Pozíció Térképet (Position Map) az összes variációból
   const positionMap = useMemo(() => {
     const map = {};
     const exact = {};
@@ -44,18 +43,15 @@ export default function VariationExplorer({ onBack, settings }) {
       const tempGame = new Chess();
       const moves = drill.lepesek.split(',');
 
-      // Az első 4 szegmens a FEN-ből (bábuk, lépésjog, sánc, en passant)
       let currentBaseFen = tempGame.fen().split(' ').slice(0, 4).join(' ');
 
       moves.forEach((moveSan) => {
-        // Regisztráljuk, hogy ebből a pozícióból ez a lépés elérhető
         if (!map[currentBaseFen]) map[currentBaseFen] = {};
         if (!map[currentBaseFen][moveSan]) map[currentBaseFen][moveSan] = { count: 0, authors: new Set() };
         
         map[currentBaseFen][moveSan].count++;
         map[currentBaseFen][moveSan].authors.add(drill.szerzo_nev);
 
-        // Lépünk a táblán, hogy megkapjuk a következő FEN-t
         try {
           tempGame.move(moveSan);
           currentBaseFen = tempGame.fen().split(' ').slice(0, 4).join(' ');
@@ -64,7 +60,6 @@ export default function VariationExplorer({ onBack, settings }) {
         }
       });
 
-      // Amikor a variáció véget ér, feljegyezzük, hogy ez egy "kifutó" pozíció
       if (!exact[currentBaseFen]) exact[currentBaseFen] = [];
       exact[currentBaseFen].push(drill);
     });
@@ -72,9 +67,7 @@ export default function VariationExplorer({ onBack, settings }) {
     return { map, exact };
   }, [allVariations]);
 
-  // ÚJ 2: Az elérhető lépéseket a Position Map-ből olvassuk ki a jelenlegi pozíció alapján (Transzpozíciók felismerése)
   const elerhetoLepesek = useMemo(() => {
-    // Levágjuk a jelenlegi állásból a lépésszámlálókat, hogy csak a tiszta pozíciót vizsgáljuk
     const currentBaseFen = game.fen().split(' ').slice(0, 4).join(' ');
 
     const nextMovesData = positionMap.map[currentBaseFen] || {};
@@ -89,7 +82,6 @@ export default function VariationExplorer({ onBack, settings }) {
     return { options, exactMatches };
   }, [positionMap, game.fen()]);
 
-  // ÚJ 3: Nyilak generálása az ELÉRHETŐ lépések alapján (Már transzpozíciót is kezeli)
   const explorerArrows = useMemo(() => {
     const arrows = [];
     elerhetoLepesek.options.forEach(opt => {
@@ -103,6 +95,17 @@ export default function VariationExplorer({ onBack, settings }) {
     });
     return arrows;
   }, [elerhetoLepesek, game.fen()]);
+
+  const [visibleArrows, setVisibleArrows] = useState([]);
+
+  useEffect(() => {
+    setVisibleArrows(explorerArrows);
+  }, [explorerArrows]);
+
+  function refreshArrows() {
+    setVisibleArrows([]);
+    setTimeout(() => setVisibleArrows(explorerArrows), 10);
+  }
 
   function getMoveOptions(square) {
     if (settings?.showLegalMoves === false) return;
@@ -133,23 +136,29 @@ export default function VariationExplorer({ onBack, settings }) {
     if (moveFrom === square) {
       setMoveFrom('');
       setOptionSquares({});
+      refreshArrows();
       return;
     }
 
     if (moveFrom) {
       const gameCopy = new Chess(game.fen());
-      const move = gameCopy.move({ from: moveFrom, to: square, promotion: 'q' });
+      let move = null;
+      try { move = gameCopy.move({ from: moveFrom, to: square, promotion: 'q' }); } catch(e) {}
+      
       if (move) {
         onDrop(moveFrom, square);
         return;
       }
+      
       const piece = game.get(square);
       if (piece && piece.color === game.turn()) {
         setMoveFrom(square);
         if (settings?.showLegalMoves !== false) getMoveOptions(square);
+        refreshArrows();
       } else {
         setMoveFrom('');
         setOptionSquares({});
+        refreshArrows();
       }
     } else {
       const piece = game.get(square);
@@ -166,18 +175,23 @@ export default function VariationExplorer({ onBack, settings }) {
     if (source === target) {
       setMoveFrom(source);
       if (settings?.showLegalMoves !== false) getMoveOptions(source);
+      refreshArrows();
       return false;
     }
 
     setOptionSquares({});
     setMoveFrom('');
     const gameCopy = new Chess(game.fen());
-    const move = gameCopy.move({ from: source, to: target, promotion: 'q' });
+    let move = null;
+    try { move = gameCopy.move({ from: source, to: target, promotion: 'q' }); } catch(e) {}
+    
     if (move) {
       setGame(gameCopy);
       const newHistory = [...history.slice(0, lépésIndex + 1), { fen: gameCopy.fen(), lastMove: { from: move.from, to: move.to } }];
       setHistory(newHistory);
       setLépésIndex(newHistory.length - 1);
+    } else {
+      refreshArrows();
     }
     return !!move;
   }
@@ -238,7 +252,7 @@ export default function VariationExplorer({ onBack, settings }) {
               onPieceDragBegin={onPieceDragBegin}
               onSquareClick={onSquareClick}
               customPieces={customPieces}
-              customArrows={explorerArrows}
+              customArrows={visibleArrows}
               customArrowColor="rgba(76, 175, 80, 0.6)"
               customDarkSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.dark }}
               customLightSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.light }}

@@ -55,8 +55,9 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
     setMoveFrom('');
   }
 
+  // JAVÍTÁS: Kivettük a !isCompleted feltételt
   function handlePrev() {
-    if (lépésIndex > 0 && !isCompleted && !wrongMove && !isBotMoving) {
+    if (lépésIndex > 0 && !wrongMove && !isBotMoving) {
       const newIdx = lépésIndex - 1;
       setLépésIndex(newIdx);
       setGame(new Chess(history[newIdx].fen));
@@ -67,8 +68,9 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
     }
   }
 
+  // JAVÍTÁS: Kivettük a !isCompleted feltételt
   function handleNext() {
-    if (lépésIndex < history.length - 1 && !isCompleted && !wrongMove && !isBotMoving) {
+    if (lépésIndex < history.length - 1 && !wrongMove && !isBotMoving) {
       const newIdx = lépésIndex + 1;
       setLépésIndex(newIdx);
       setGame(new Chess(history[newIdx].fen));
@@ -359,35 +361,35 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
 
   return (
     <div style={{
-      position: 'fixed', // Képernyőhöz rögzítve, kizárja a görgetést
+      position: 'fixed',
       top: 0,
       left: 0,
       width: '100vw',
       height: '100vh',
-      background: 'linear-gradient(135deg, #F0F4F8 0%, #E2ECF6 100%)', // App háttérszíne
+      background: 'linear-gradient(135deg, #F0F4F8 0%, #E2ECF6 100%)',
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',
-      justifyContent: 'center',
-      overflow: 'hidden', // Görgetés letiltása
+      justifyContent: 'flex-start', // JAVÍTÁS: Center helyett fentről rögzítjük
+      paddingTop: '6vh', // JAVÍTÁS: Hogy ne másszon rá a képernyő tetejére
+      overflowY: 'auto', // JAVÍTÁS: Mobilokon lehessen görgetni, ha a panel alulra kerül
+      overflowX: 'hidden',
       zIndex: 1000,
       fontFamily: 'sans-serif',
-      padding: '20px',
       boxSizing: 'border-box'
     }}>
       
-      {/* FEJLÉC: Vissza gomb és Progress indikátor */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '700px', marginBottom: '20px' }}>
+      {/* FEJLÉC */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', maxWidth: '700px', marginBottom: '20px', padding: '0 20px' }}>
         <button className="btn-outline" onClick={onBack} style={{ background: 'var(--white)' }}>{t.backBtn}</button>
         <strong style={{ fontSize: '1.2rem', color: 'var(--primary-blue)', background: 'var(--white)', padding: '10px 20px', borderRadius: '8px', boxShadow: 'var(--shadow-sm)' }}>
           DRILL {currentIndex + 1} / {totalDrills}
         </strong>
       </div>
 
-      {/* FŐ TARTALOM: Tábla és Panel */}
-      <div style={{ display: 'flex', gap: '30px', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', width: '100%', maxWidth: '1200px' }}>
+      <div style={{ display: 'flex', gap: '30px', justifyContent: 'center', alignItems: 'flex-start', flexWrap: 'wrap', width: '100%', maxWidth: '1200px', padding: '0 20px' }}>
         
-        {/* SAKKTÁBLA KONTÉNER (Dinamikusan a lehető legnagyobb) */}
+        {/* SAKKTÁBLA KONTÉNER */}
         <div style={{ width: 'min(90vw, 65vh)', maxWidth: '700px', textAlign: 'center' }}>
           <div style={{ boxShadow: 'var(--shadow-md)', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'var(--white)' }}>
             <Chessboard 
@@ -406,62 +408,67 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
             />
           </div>
 
-          {!isCompleted && (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '15px' }}>
-              <button 
-                className="btn-outline" 
-                onClick={handlePrev} 
-                disabled={lépésIndex === 0 || isBotMoving || wrongMove}
-                style={{ padding: '8px 20px', background: 'var(--white)', opacity: (lépésIndex === 0 || isBotMoving || wrongMove) ? 0.5 : 1, cursor: (lépésIndex === 0 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer' }}
-              >◀️</button>
-              <button 
-                className="btn-outline" 
-                onClick={handleNext} 
-                disabled={lépésIndex === history.length - 1 || isBotMoving || wrongMove}
-                style={{ padding: '8px 20px', background: 'var(--white)', opacity: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 0.5 : 1, cursor: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer' }}
-              >▶️</button>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: '15px', marginTop: '15px' }}>
+            <button 
+              className="btn-outline" 
+              onClick={handlePrev} 
+              disabled={lépésIndex === 0 || isBotMoving || wrongMove}
+              style={{ padding: '8px 20px', background: 'var(--white)', opacity: (lépésIndex === 0 || isBotMoving || wrongMove) ? 0.5 : 1, cursor: (lépésIndex === 0 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer' }}
+            >◀️</button>
+            <button 
+              className="btn-outline" 
+              onClick={handleNext} 
+              disabled={lépésIndex === history.length - 1 || isBotMoving || wrongMove}
+              style={{ padding: '8px 20px', background: 'var(--white)', opacity: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 0.5 : 1, cursor: (lépésIndex === history.length - 1 || isBotMoving || wrongMove) ? 'not-allowed' : 'pointer' }}
+            >▶️</button>
+          </div>
+          
+          {/* HINT PANEL - JAVÍTÁS: Mindig a DOM-ban van, csak elhalványul, így nem ugrik a tábla */}
+          <div className="card" style={{ 
+            marginTop: '15px', padding: '10px 15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px',
+            opacity: isCompleted ? 0 : 1, 
+            pointerEvents: isCompleted ? 'none' : 'auto',
+            transition: 'opacity 0.3s ease'
+          }}>
+            <p style={{ margin: 0, height: '20px', fontWeight: 'bold', color: hintLevel > 0 ? 'var(--primary-blue)' : 'transparent' }}>
+              {hintLevel === 1 && t.hintMovePiece}
+              {hintLevel === 2 && t.hintFollowArrow}
+            </p>
+            <button 
+              className="btn-outline" 
+              onClick={handleHintClick}
+              disabled={hintLevel === 2}
+              style={{ opacity: hintLevel === 2 ? 0.5 : 1, cursor: hintLevel === 2 ? 'not-allowed' : 'pointer', borderColor: hintLevel === 1 ? '#F59E0B' : 'var(--primary-blue)', color: hintLevel === 1 ? '#F59E0B' : 'var(--primary-blue)' }}
+            >
+              {hintLevel === 0 ? t.hintRevealPiece : hintLevel === 1 ? t.hintExactTarget : t.hintRevealed}
+            </button>
+          </div>
+        </div>
+
+        {/* EREDMÉNY PANEL - JAVÍTÁS: Mindig a DOM-ban van, így a tábla eleve megkapja a végleges pozícióját */}
+        <div style={{ 
+          width: '300px', display: 'flex', flexDirection: 'column', gap: '15px',
+          opacity: isCompleted ? 1 : 0,
+          pointerEvents: isCompleted ? 'auto' : 'none',
+          transition: 'opacity 0.3s ease'
+        }}>
+          {drill.megjegyzes && (
+            <div className="card" style={{ background: '#FFFBEB', borderColor: '#FDE68A', padding: '20px' }}>
+              <h3 style={{ margin: '0 0 10px 0', color: '#D97706', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {t.commentTitle}
+              </h3>
+              <p style={{ margin: 0, color: 'var(--text-dark)', lineHeight: '1.6', fontSize: '15px', whiteSpace: 'pre-wrap' }}>
+                {drill.megjegyzes}
+              </p>
             </div>
           )}
           
-          {!isCompleted && (
-            <div className="card" style={{ marginTop: '15px', padding: '10px 15px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '5px' }}>
-              <p style={{ margin: 0, height: '20px', fontWeight: 'bold', color: hintLevel > 0 ? 'var(--primary-blue)' : 'transparent' }}>
-                {hintLevel === 1 && t.hintMovePiece}
-                {hintLevel === 2 && t.hintFollowArrow}
-              </p>
-              <button 
-                className="btn-outline" 
-                onClick={handleHintClick}
-                disabled={hintLevel === 2}
-                style={{ opacity: hintLevel === 2 ? 0.5 : 1, cursor: hintLevel === 2 ? 'not-allowed' : 'pointer', borderColor: hintLevel === 1 ? '#F59E0B' : 'var(--primary-blue)', color: hintLevel === 1 ? '#F59E0B' : 'var(--primary-blue)' }}
-              >
-                {hintLevel === 0 ? t.hintRevealPiece : hintLevel === 1 ? t.hintExactTarget : t.hintRevealed}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* EREDMÉNY PANEL (Ha végzett a drillel) */}
-        {isCompleted && (
-          <div style={{ width: '300px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-            {drill.megjegyzes && (
-              <div className="card" style={{ background: '#FFFBEB', borderColor: '#FDE68A', padding: '20px' }}>
-                <h3 style={{ margin: '0 0 10px 0', color: '#D97706', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {t.commentTitle}
-                </h3>
-                <p style={{ margin: 0, color: 'var(--text-dark)', lineHeight: '1.6', fontSize: '15px', whiteSpace: 'pre-wrap' }}>
-                  {drill.megjegyzes}
-                </p>
-              </div>
-            )}
-            
-            <div className="card" style={{ padding: '20px' }}>
-              <button className="btn-primary" onClick={() => onComplete(hibák)} style={{ width: '100%', padding: '15px', fontSize: '16px' }}>
-                {currentIndex + 1 < totalDrills ? t.nextDrillBtn : t.resultsBtn}
-              </button>
-            </div>
+          <div className="card" style={{ padding: '20px' }}>
+            <button className="btn-primary" onClick={() => onComplete(hibák)} style={{ width: '100%', padding: '15px', fontSize: '16px' }}>
+              {currentIndex + 1 < totalDrills ? t.nextDrillBtn : t.resultsBtn}
+            </button>
           </div>
-        )}
+        </div>
         
       </div>
     </div>

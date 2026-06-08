@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './supabaseClient';
 import DrillGame from './DrillGame';
 import { translations } from './translations';
 
 export default function DrillPlayer({ onBack, session, settings }) {
   const [drills, setDrills] = useState([]);
-  const [selectedKategoria, setSelectedKategoria] = useState('');
-  const [selectedChapter, setSelectedChapter] = useState('');
-  const [isRandom, setIsRandom] = useState(true);
+  
+  // Objektum, ami tárolja a kipipált kurzusokat és fejezeteket
+  const [selections, setSelections] = useState({});
+  
   const [playingDrills, setPlayingDrills] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [results, setResults] = useState([]);
@@ -26,21 +27,62 @@ export default function DrillPlayer({ onBack, session, settings }) {
     if (data) setDrills(data);
   }
 
-  const kategoriak = [...new Set(drills.map(d => d.kategoria).filter(Boolean))];
-  const currentCourseDrills = selectedKategoria ? drills.filter(d => d.kategoria === selectedKategoria) : [];
-  const chapters = [...new Set(currentCourseDrills.map(d => d.chapter).filter(Boolean))];
+  // Kurzusok és fejezetek hierarchikus csoportosítása
+  const courseStructure = useMemo(() => {
+    const map = {};
+    drills.forEach(d => {
+      if (!d.kategoria) return;
+      if (!map[d.kategoria]) map[d.kategoria] = new Set();
+      if (d.chapter) map[d.kategoria].add(d.chapter);
+    });
+    return map;
+  }, [drills]);
 
+  // Kurzus pipálásának kezelése
+  function toggleCourse(course) {
+    setSelections(prev => {
+      const next = { ...prev };
+      if (next[course]) {
+        delete next[course];
+      } else {
+        next[course] = Array.from(courseStructure[course]);
+      }
+      return next;
+    });
+  }
+
+  // Fejezet pipálásának kezelése
+  function toggleChapter(course, chapter) {
+    setSelections(prev => {
+      const next = { ...prev };
+      if (!next[course]) next[course] = [];
+      
+      if (next[course].includes(chapter)) {
+        next[course] = next[course].filter(c => c !== chapter);
+        if (next[course].length === 0 && courseStructure[course].size > 0) {
+          delete next[course];
+        }
+      } else {
+        next[course] = [...next[course], chapter];
+      }
+      return next;
+    });
+  }
+
+  // Start Drill: Mindig véletlenszerű (Shuffle) sorrendben
   function startDrill() {
-    let filtered = currentCourseDrills;
-    if (selectedChapter) {
-      filtered = filtered.filter(d => d.chapter === selectedChapter);
-    }
-    if (filtered.length === 0) return;
+    const toPlay = drills.filter(d => {
+      if (!d.kategoria || !selections[d.kategoria]) return false;
+      if (d.chapter && !selections[d.kategoria].includes(d.chapter)) return false;
+      return true;
+    });
+
+    if (toPlay.length === 0) return;
     
-    let toPlay = [...filtered];
-    if (isRandom) toPlay = toPlay.sort(() => Math.random() - 0.5);
+    // Automatikus keverés
+    const finalDrills = [...toPlay].sort(() => Math.random() - 0.5);
     
-    setPlayingDrills(toPlay);
+    setPlayingDrills(finalDrills);
     setCurrentIndex(0);
     setResults([]);
     setFinished(false);
@@ -55,6 +97,8 @@ export default function DrillPlayer({ onBack, session, settings }) {
       setFinished(true);
     }
   }
+
+  const isAnyCourseSelected = Object.keys(selections).length > 0;
 
   if (playingDrills.length > 0 && !finished) {
     return (
@@ -89,48 +133,71 @@ export default function DrillPlayer({ onBack, session, settings }) {
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', width: '100%', padding: '20px', boxSizing: 'border-box' }}>
-      <div style={{ width: '100%', maxWidth: '500px' }}>
+      <div style={{ width: '100%', maxWidth: '600px' }}>
         
         <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: '20px' }}>
           <button className="btn-outline" onClick={onBack}>{t.backToMenu}</button>
         </div>
 
-        <div className="card" style={{ textAlign: 'center' }}>
-          <h2 style={{ marginTop: 0, color: 'var(--primary-blue)' }}>{t.startPractice}</h2>
+        <div className="card">
+          <h2 style={{ marginTop: 0, color: 'var(--primary-blue)', textAlign: 'center' }}>{t.startPractice}</h2>
+          
           {drills.length === 0 ? (
-            <p>{t.selectCoursePrompt}</p>
+            <p style={{ textAlign: 'center' }}>{t.selectCoursePrompt}</p>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '15px', textAlign: 'left' }}>
-              <div>
-                <label style={{ fontWeight: 'bold', marginBottom: '5px', display: 'block' }}>{t.courseSelectLabel}</label>
-                <select className="input-field" value={selectedKategoria} onChange={(e) => { setSelectedKategoria(e.target.value); setSelectedChapter(''); }}>
-                  <option value="">-- {t.chooseCourse} --</option>
-                  {kategoriak.map(k => <option key={k} value={k}>{k}</option>)}
-                </select>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              {/* CHECKBOX LISTA */}
+              <div style={{ 
+                background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: '8px', 
+                padding: '15px', maxHeight: '40vh', overflowY: 'auto' 
+              }}>
+                <label style={{ fontWeight: 'bold', marginBottom: '10px', display: 'block', borderBottom: '1px solid #ddd', paddingBottom: '5px' }}>
+                  {t.courseSelectLabel}
+                </label>
+                
+                {Object.keys(courseStructure).map(course => {
+                  const chapters = Array.from(courseStructure[course]);
+                  const isCourseSelected = !!selections[course];
+
+                  return (
+                    <div key={course} style={{ marginBottom: '10px' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontWeight: '600', color: 'var(--text-dark)' }}>
+                        <input 
+                          type="checkbox" 
+                          checked={isCourseSelected}
+                          onChange={() => toggleCourse(course)}
+                          style={{ width: '18px', height: '18px', accentColor: 'var(--primary-blue)' }}
+                        />
+                        {course}
+                      </label>
+
+                      {chapters.length > 0 && (
+                        <div style={{ marginLeft: '25px', marginTop: '5px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                          {chapters.map(chapter => (
+                            <label key={chapter} style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: 'var(--text-light)', fontSize: '0.95rem' }}>
+                              <input 
+                                type="checkbox" 
+                                checked={isCourseSelected && selections[course].includes(chapter)}
+                                onChange={() => toggleChapter(course, chapter)}
+                                style={{ accentColor: 'var(--primary-blue)' }}
+                              />
+                              {chapter}
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
-              {selectedKategoria && chapters.length > 0 && (
-                <div>
-                  <label style={{ fontWeight: 'bold', marginBottom: '5px', display: 'block' }}>{t.chapterSelectLabel}</label>
-                  <select className="input-field" value={selectedChapter} onChange={(e) => setSelectedChapter(e.target.value)}>
-                    <option value="">-- {t.allChapters} --</option>
-                    {chapters.map(ch => <option key={ch} value={ch}>{ch}</option>)}
-                  </select>
-                </div>
-              )}
-
-              <div style={{ display: 'flex', gap: '15px', alignItems: 'center', marginTop: '10px' }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                  <input type="radio" checked={isRandom} onChange={() => setIsRandom(true)} style={{ accentColor: 'var(--primary-blue)' }} />
-                  {t.shuffleMode}
-                </label>
-                <label style={{ display: 'flex', alignItems: 'center', gap: '5px', cursor: 'pointer' }}>
-                  <input type="radio" checked={!isRandom} onChange={() => setIsRandom(false)} style={{ accentColor: 'var(--primary-blue)' }} />
-                  {t.sequentialMode}
-                </label>
-              </div>
-
-              <button className="btn-primary" onClick={startDrill} disabled={!selectedKategoria} style={{ marginTop: '15px', opacity: !selectedKategoria ? 0.5 : 1 }}>
+              <button 
+                className="btn-primary" 
+                onClick={startDrill} 
+                disabled={!isAnyCourseSelected} 
+                style={{ marginTop: '10px', padding: '15px', fontSize: '1.1rem', opacity: !isAnyCourseSelected ? 0.5 : 1, cursor: !isAnyCourseSelected ? 'not-allowed' : 'pointer' }}
+              >
                 {t.startBtn}
               </button>
             </div>
