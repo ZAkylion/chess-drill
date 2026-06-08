@@ -97,6 +97,14 @@ export const translations = {
     errorDeleteDenied: "Az adatbázis megtagadta a törlést!",
     errorSaveDenied: "Az adatbázis megtagadta a mentést!",
     errorOperationFailed: "Művelet sikertelen: ",
+    filterTitle: "🔍 Szűrés",
+    searchCoursePlaceholder: "Keresés kurzusnév alapján...",
+    searchAuthorPlaceholder: "Keresés készítő (szerző) alapján...",
+    searchByMovesTitle: "Lépés alapú keresés",
+    searchByMovesSubtitle: "(Húzz a táblán!)",
+    clearBtn: "Törlés",
+    movesCount: "lépés",
+    noCoursesMatch: "Nincs a keresési feltételeknek megfelelő kurzus.",
 
     // Profile.jsx & Auth
     profileTitle: "👤 Profilom",
@@ -215,6 +223,14 @@ export const translations = {
     errorDeleteDenied: "The database denied the deletion!",
     errorSaveDenied: "The database denied the save!",
     errorOperationFailed: "Operation failed: ",
+    filterTitle: "🔍 Filter",
+    searchCoursePlaceholder: "Search by course name...",
+    searchAuthorPlaceholder: "Search by author...",
+    searchByMovesTitle: "Search by moves",
+    searchByMovesSubtitle: "(Drag on the board!)",
+    clearBtn: "Clear",
+    movesCount: "moves",
+    noCoursesMatch: "No courses match the search criteria.",
 
     // Profile.jsx & Auth
     profileTitle: "👤 My Profile",
