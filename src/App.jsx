@@ -17,6 +17,7 @@ import practiceIcon from './icons/practice.png';
 import editorIcon from './icons/editor.png';
 import chessboardIcon from './icons/chessboard.png';
 import IosInstallPrompt from './IosInstallPrompt';
+import AndroidInstallPrompt from './AndroidInstallPrompt';
 
 const MenuCard = ({ title, subtitle, imgSrc, onClick, span = 1, isRow = false, isMobile = false }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -30,15 +31,15 @@ const MenuCard = ({ title, subtitle, imgSrc, onClick, span = 1, isRow = false, i
   let flexDir = isRow ? 'row' : 'column';
   let textAlign = isRow ? 'left' : 'center';
 
+  // JAVÍTÁS: Mobilon minden kártya szigorúan "egymás alatti" (column) elrendezést kap!
   if (isMobile) {
-    // Mobilon EGYFORMÁN néz ki minden gomb (1 oszlopos lista)
     iconSize = '45px'; 
     titleSize = '18px'; 
     subSize = '13px'; 
-    gapSize = '15px'; 
-    padSize = '0 20px'; 
-    flexDir = 'row'; 
-    textAlign = 'left';
+    gapSize = '8px'; // Kisebb rés, mivel egymás alatt vannak
+    padSize = '12px 10px'; // Szimmetrikus belső margó
+    flexDir = 'column'; // ETTŐL KERÜLNEK EGYMÁS ALÁ
+    textAlign = 'center'; // Középre igazítjuk a szöveget is
   }
   
   return (
@@ -47,7 +48,6 @@ const MenuCard = ({ title, subtitle, imgSrc, onClick, span = 1, isRow = false, i
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
       style={{
-        // Mobilon 1 oszlopos, így minden gomb teljes szélességű
         gridColumn: `span ${isMobile ? 1 : span}`,
         width: '100%',
         height: '100%', 
@@ -90,7 +90,6 @@ const MenuCard = ({ title, subtitle, imgSrc, onClick, span = 1, isRow = false, i
           color: isHovered ? '#E0E7FF' : '#6B7280', 
           lineHeight: '1.2',
           transition: 'color 0.2s ease-in-out',
-          // Túl hosszú szöveg esetén pont-pont-pont a végén (nem nyomja szét a dobozt)
           display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden'
         }}>
           {subtitle}
@@ -137,19 +136,15 @@ export default function App() {
   const userName = session?.user?.user_metadata?.username || session?.user?.email?.split('@')[0] || (lang === 'en' ? 'Guest' : 'Vendég');
   const initials = userName.substring(0, 2).toUpperCase();
 
-  // Dinamikus rácsbeállítások:
-  // Mobil: 1 oszlop | Tablet: 2 oszlop | Monitor: 4 oszlop
   const gridColumns = isMobile ? '1fr' : (isTablet ? 'repeat(2, 1fr)' : 'repeat(4, 1fr)');
-  
-  // Sorok magassága. A 'minmax(0, 1fr)' garantálja, hogy egyenlően osztják el a HELYET, de nem folynak ki!
   const gridRows = isMobile || isTablet ? 'auto' : '165px 165px 165px';
   const gridAutoRows = isMobile || isTablet ? 'minmax(0, 1fr)' : 'auto';
 
   return (
     <div style={{
-      height: '100dvh', // Szigorúan a képernyő látható magassága
+      height: '100dvh', 
       width: '100vw',
-      position: 'fixed', // LEHETETLENNÉ TESZI A GÖRGETÉST
+      position: 'fixed', 
       top: 0, left: 0, bottom: 0, right: 0,
       background: '#E6EDF5', 
       display: 'flex',
@@ -162,11 +157,10 @@ export default function App() {
       fontFamily: "'Inter', 'Segoe UI', sans-serif"
     }}>
 
-      {/* AZ IOS TELEPÍTŐ ÉS A HÁTTÉRTÁBLA ITT VAN GLOBÁLISAN */}
       <IosInstallPrompt />
+      <AndroidInstallPrompt />
       <BackgroundChessboard />
 
-      {/* PROFIL GOMB FEJLÉC */}
       <div style={{ 
         width: '100%', maxWidth: '1050px', display: 'flex', justifyContent: 'flex-end',
         paddingBottom: isMobile ? '15px' : '20px', zIndex: 10
@@ -188,7 +182,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* FŐ KONTÉNER ÉS DINAMIKUS GRID */}
       <div style={{ 
         display: 'grid', 
         gridTemplateColumns: gridColumns, 
@@ -197,25 +190,25 @@ export default function App() {
         gap: isMobile ? '10px' : '18px', 
         width: '100%', 
         maxWidth: '1050px', 
-        flex: 1, // Kitölti a maradék magasságot a fejléc alatt
-        minHeight: 0, // Kritikus! Megakadályozza a grid felpuffadását!
+        flex: 1, 
+        minHeight: 0, 
         zIndex: 10 
       }}>
         
-        {/* BANNER */}
+        {/* BANNER JAVÍTÁS: Mobilon ez is "column" elrendezést kap! */}
         <div style={{ 
           gridColumn: `span ${isMobile ? 1 : (isTablet ? 2 : 4)}`, 
           background: '#ffffff', 
           borderRadius: '12px', 
           display: 'flex', 
-          flexDirection: 'row', 
+          flexDirection: isMobile ? 'column' : 'row', // EGYMÁS ALÁ KERÜL A KIRÁLY ÉS A SZÖVEG
           alignItems: 'center', 
-          justifyContent: isMobile ? 'flex-start' : 'center', 
-          gap: isMobile ? '15px' : '45px',
+          justifyContent: isMobile ? 'center' : 'center', 
+          gap: isMobile ? '10px' : '45px',
           boxShadow: '0 3px 9px rgba(0,0,0,0.03)', position: 'relative', 
           overflow: 'hidden', border: '1px solid #E5E7EB',
           width: '100%', height: '100%', boxSizing: 'border-box',
-          padding: isMobile ? '0 20px' : '0'
+          padding: isMobile ? '15px 10px' : '0'
         }}>
           
           <img 
@@ -227,14 +220,14 @@ export default function App() {
             }} 
           />
 
-          <img src={kingIcon} alt="King" style={{ width: isMobile ? '60px' : '90px', height: 'auto', zIndex: 2, objectFit: 'contain' }} />
+          <img src={kingIcon} alt="King" style={{ width: isMobile ? '50px' : '90px', height: 'auto', zIndex: 2, objectFit: 'contain' }} />
           
-          <div style={{ zIndex: 2, textAlign: 'left', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <h1 style={{ margin: '0 0 3px 0', fontSize: isMobile ? '24px' : '39px', color: '#0F172A', fontWeight: '800' }}>Chess Drill Master</h1>
-            <p style={{ margin: '0 0 3px 0', fontSize: isMobile ? '15px' : '23px', color: '#374151' }}>
+          <div style={{ zIndex: 2, textAlign: isMobile ? 'center' : 'left', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <h1 style={{ margin: '0 0 3px 0', fontSize: isMobile ? '20px' : '39px', color: '#0F172A', fontWeight: '800' }}>Chess Drill Master</h1>
+            <p style={{ margin: '0 0 3px 0', fontSize: isMobile ? '14px' : '23px', color: '#374151' }}>
               {lang === 'en' ? 'Welcome' : 'Üdvözöljük'}, <strong>{userName}</strong>!
             </p>
-            <p style={{ margin: 0, fontSize: isMobile ? '13px' : '20px', color: '#6B7280' }}>
+            <p style={{ margin: 0, fontSize: isMobile ? '12px' : '20px', color: '#6B7280' }}>
               {lang === 'en' ? 'Choose a module:' : 'Válasszon egy modult:'}
             </p>
           </div>

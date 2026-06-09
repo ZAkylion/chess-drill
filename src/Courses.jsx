@@ -17,7 +17,6 @@ export default function Courses({ onBack, session, isAdmin, settings }) {
   const [searchGame, setSearchGame] = useState(new Chess());
   const [searchMoves, setSearchMoves] = useState([]);
   
-  // ÚJ: A kereső tábla orientációja és hover állapota
   const [searchBoardOrientation, setSearchBoardOrientation] = useState('white');
   const [isBoardHovered, setIsBoardHovered] = useState(false);
 
@@ -51,37 +50,40 @@ export default function Courses({ onBack, session, isAdmin, settings }) {
     }
   }
 
+  // JAVÍTOTT TOGGLE REPERTOIRE FÜGGVÉNY
   async function toggleRepertoire(kategoria) {
     if (!session) return alert(t.alertLoginRequired || (lang === 'en' ? 'Log in to build your repertoire!' : 'Be kell jelentkezned a repertoár építéséhez!'));
     setLoadingKategoria(kategoria); 
     
     try {
       if (myRepertoire.includes(kategoria)) {
-        const { data, error } = await supabase
+        console.log("Törlés indítása kategóriára:", kategoria);
+        
+        const { error } = await supabase
           .from('user_repertoires')
           .delete()
           .eq('user_id', session.user.id)
-          .eq('kategoria', kategoria)
-          .select(); 
+          .eq('kategoria', kategoria);
 
         if (error) throw error;
-        if (!data || data.length === 0) throw new Error(t.errorDeleteDenied || 'Sikertelen törlés');
 
         setMyRepertoire(prev => prev.filter(k => k !== kategoria));
+        console.log("Sikeres törlés");
       } else {
-        const { data, error } = await supabase
+        console.log("Hozzáadás indítása kategóriára:", kategoria);
+        
+        const { error } = await supabase
           .from('user_repertoires')
-          .insert([{ user_id: session.user.id, kategoria }])
-          .select(); 
+          .insert([{ user_id: session.user.id, kategoria: kategoria }]);
 
         if (error) throw error;
-        if (!data || data.length === 0) throw new Error(t.errorSaveDenied || 'Sikertelen mentés');
 
         setMyRepertoire(prev => [...prev, kategoria]);
+        console.log("Sikeres hozzáadás");
       }
     } catch (error) {
       console.error("Adatbázis hiba:", error);
-      alert(`${t.errorOperationFailed || 'Művelet sikertelen: '}${error.message}`);
+      alert(`${t.errorOperationFailed || 'Művelet sikertelen: '} ${error.message}`);
     } finally {
       setLoadingKategoria(null); 
     }
@@ -283,7 +285,6 @@ export default function Courses({ onBack, session, isAdmin, settings }) {
               🔄 {searchBoardOrientation === 'white' ? (t.colorWhite || 'Világos') : (t.colorBlack || 'Sötét')}
             </button>
 
-            {/* ÚJ: Hover effektus az onMouseEnter/onMouseLeave eseményekkel */}
             <div 
               onMouseEnter={() => setIsBoardHovered(true)}
               onMouseLeave={() => setIsBoardHovered(false)}
