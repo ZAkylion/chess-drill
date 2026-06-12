@@ -294,4 +294,4 @@ export default function VariationExplorer({ onBack, settings }) {
       </div>
     </div>
   );
-}
+} 
