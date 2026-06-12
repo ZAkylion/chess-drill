@@ -5,17 +5,17 @@ import { supabase } from './supabaseClient';
 import { boardThemes, getCustomPieces } from './chessConfig';
 import { translations } from './translations';
 
-export default function DrillEditor({ onBack, session, isAdmin, settings }) {
+export default function DrillEditor({ onBack, session, isAdmin, settings, importPayload, clearImportPayload }) {
   const [activeTab, setActiveTab] = useState('editor');
   const [managerCourse, setManagerCourse] = useState(null);
   
   const [game, setGame] = useState(new Chess());
-  
   const [boardOrientation, setBoardOrientation] = useState('white');
   
   const [editKategoria, setEditKategoria] = useState('');
   const [editChapter, setEditChapter] = useState('');
   const [editMegjegyzes, setEditMegjegyzes] = useState(''); 
+  const [importText, setImportText] = useState(''); 
   
   const [editLepesek, setEditLepesek] = useState([]);
   const [drillLista, setDrillLista] = useState([]);
@@ -44,6 +44,59 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
 
   useEffect(() => { fetchList(); }, [session, isAdmin]);
 
+  // ÚJ, GOLYÓÁLLÓ AUTOMATIKUS FELDOLGOZÓ (Átugorja a szemetet)
+  useEffect(() => {
+    if (importPayload && importPayload.moves) {
+      
+      if (importPayload.course) setEditKategoria(importPayload.course);
+      if (importPayload.chapter) setEditChapter(importPayload.chapter);
+      
+      const isBlack = (importPayload.course + importPayload.chapter).toLowerCase().includes('black');
+      setBoardOrientation(isBlack ? 'black' : 'white');
+
+      let rawMoves = importPayload.moves;
+      let cleaned = rawMoves.replace(/\{[^}]*\}/g, '').replace(/\([^)]*\)/g, '');
+      cleaned = cleaned.replace(/\b\d+\s*\.{1,3}/g, ' '); 
+      cleaned = cleaned.replace(/[!?]/g, ''); // Kigyomláljuk az értékelő jeleket (pl. !?)
+
+      let movesArray = cleaned.includes(',') ? cleaned.split(',') : cleaned.split(/\s+/);
+      movesArray = movesArray.map(m => m.trim()).filter(move => move.length > 0);
+
+      const tempGame = new Chess();
+      const newHistory = [{ fen: tempGame.fen(), lastMove: null }];
+      const validMoves = [];
+
+      for (let m of movesArray) {
+        try {
+          const res = tempGame.move(m);
+          if (res) {
+            validMoves.push(res.san);
+            newHistory.push({ fen: tempGame.fen(), lastMove: { from: res.from, to: res.to } });
+          } else {
+            // Ha rossz a lépés, de még egy jó sem volt, csak simán átugorjuk a fejlécet/szemetet!
+            if (validMoves.length > 0) break;
+          }
+        } catch (e) { 
+          if (validMoves.length > 0) break;
+        }
+      }
+
+      if (validMoves.length > 0) {
+        setEditLepesek(validMoves);
+        setGame(tempGame);
+        setHistory(newHistory);
+        setLépésIndex(newHistory.length - 1);
+        setOptionSquares({});
+        setMoveFrom('');
+        alert(lang === 'en' ? `🤖 Auto-imported ${validMoves.length} moves!` : `🤖 A robot sikeresen kitöltött mindent és betöltött ${validMoves.length} lépést a táblára! Mentsd el!`);
+      } else {
+        alert(lang === 'en' ? `Error. Raw text: ${rawMoves}` : `Hiba: Még mindig nem találok érvényes lépést. Ezt kaptam a robottól:\n\n${rawMoves}`);
+      }
+
+      clearImportPayload();
+    }
+  }, [importPayload, lang]);
+
   useEffect(() => {
     if (activeTab !== 'editor') return;
     const handleKeyDown = (e) => {
@@ -67,6 +120,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
     setEditKategoria(drill.kategoria || '');
     setEditChapter(drill.chapter || ''); 
     setEditMegjegyzes(drill.megjegyzes || ''); 
+    setImportText('');
     
     const isBlack = drill.nev.toLowerCase().includes('black');
     setBoardOrientation(isBlack ? 'black' : 'white');
@@ -92,6 +146,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
     setEditLepesek([]); 
     setEditingDrillNev(null);
     setEditMegjegyzes(''); 
+    setImportText('');
     setHistory([{ fen: new Chess().fen(), lastMove: null }]); 
     setLépésIndex(0);
     setOptionSquares({});
@@ -103,6 +158,47 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
     setEditKategoria(courseName);
     setEditChapter(chapterName);
     setActiveTab('editor');
+  }
+
+  // A manuális importáló is megkapta a golyóálló algoritmust
+  function handleSmartImport() {
+    if (!importText.trim()) return;
+    let cleaned = importText.replace(/\{[^}]*\}/g, '').replace(/\([^)]*\)/g, '');
+    cleaned = cleaned.replace(/\b\d+\s*\.{1,3}/g, ' ').replace(/[!?]/g, '');
+
+    let movesArray = cleaned.includes(',') ? cleaned.split(',') : cleaned.split(/\s+/);
+    movesArray = movesArray.map(m => m.trim()).filter(move => move.length > 0);
+
+    const tempGame = new Chess();
+    const newHistory = [{ fen: tempGame.fen(), lastMove: null }];
+    const validMoves = [];
+
+    for (let m of movesArray) {
+      try {
+        const res = tempGame.move(m);
+        if (res) {
+          validMoves.push(res.san);
+          newHistory.push({ fen: tempGame.fen(), lastMove: { from: res.from, to: res.to } });
+        } else {
+          if (validMoves.length > 0) break;
+        }
+      } catch (e) { 
+        if (validMoves.length > 0) break;
+      }
+    }
+
+    if (validMoves.length > 0) {
+      setEditLepesek(validMoves);
+      setGame(tempGame);
+      setHistory(newHistory);
+      setLépésIndex(newHistory.length - 1);
+      setOptionSquares({});
+      setMoveFrom('');
+      setImportText(''); 
+      alert(lang === 'en' ? `Successfully imported ${validMoves.length} moves!` : `Sikeresen beolvasva ${validMoves.length} lépés!`);
+    } else {
+      alert(lang === 'en' ? 'Could not find any valid chess moves.' : 'Nem találtam érvényes sakk lépést!');
+    }
   }
 
   function handlePrev() { 
@@ -303,6 +399,28 @@ export default function DrillEditor({ onBack, session, isAdmin, settings }) {
                   <datalist id="chapter-suggestions">{myChapters.map(chapter => <option key={chapter} value={chapter} />)}</datalist>
                 </div>
               )}
+            </div>
+
+            <div style={{ marginBottom: '20px', background: 'var(--light-blue)', padding: '15px', borderRadius: '8px', border: '1px dashed var(--primary-blue)' }}>
+              <label style={{ fontSize: '13px', fontWeight: 'bold', color: 'var(--primary-blue)', display: 'block', marginBottom: '8px' }}>
+                ⚡ {lang === 'en' ? 'Smart Import' : 'Okos Importálás'}
+              </label>
+              <div style={{ display: 'flex', gap: '10px', alignItems: 'stretch' }}>
+                <textarea 
+                  className="input-field" 
+                  placeholder={lang === 'en' ? "e.g.: 1. e4 e5 2. Nf3 Nc6..." : "Pl.: 1. e4 e5 2. Nf3 Nc6..."}
+                  value={importText} 
+                  onChange={(e) => setImportText(e.target.value)}
+                  style={{ flex: 1, resize: 'vertical', minHeight: '42px', margin: 0 }}
+                />
+                <button 
+                  className="btn-primary" 
+                  onClick={handleSmartImport}
+                  style={{ padding: '0 20px', whiteSpace: 'nowrap', borderRadius: '6px' }}
+                >
+                  {lang === 'en' ? 'Load' : 'Beolvasás'}
+                </button>
+              </div>
             </div>
 
             <div style={{ marginBottom: '20px' }}>
