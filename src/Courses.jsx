@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { supabase } from './supabaseClient';
+import { supabase, fetchAllRows } from './supabaseClient'; // Új fetchAllRows import
 import { translations } from './translations';
 import { Chess } from 'chess.js';
-import { Chessboard } from 'react-chessboard';
-import { boardThemes, getCustomPieces } from './chessConfig';
+import InteractiveBoard from './InteractiveBoard'; // A központi sakktáblánk
 
 export default function Courses({ onBack, session, isAdmin, settings }) {
   const [drillLista, setDrillLista] = useState([]);
@@ -28,14 +27,15 @@ export default function Courses({ onBack, session, isAdmin, settings }) {
     if (session) fetchRepertoire();
   }, [session]);
 
+  // JAVÍTOTT: Az 1000 soros limit megkerülése
   async function fetchList() {
-    const { data, error } = await supabase.from('variaciok').select('*');
-    if (error) {
+    try {
+      const data = await fetchAllRows('variaciok'); 
+      if (data) {
+        setDrillLista(data);
+      }
+    } catch (error) {
       console.error("Hiba a kurzusok lekérésekor:", error);
-      return;
-    }
-    if (data) {
-      setDrillLista(data);
     }
   }
 
@@ -50,15 +50,12 @@ export default function Courses({ onBack, session, isAdmin, settings }) {
     }
   }
 
-  // JAVÍTOTT TOGGLE REPERTOIRE FÜGGVÉNY
   async function toggleRepertoire(kategoria) {
     if (!session) return alert(t.alertLoginRequired || (lang === 'en' ? 'Log in to build your repertoire!' : 'Be kell jelentkezned a repertoár építéséhez!'));
     setLoadingKategoria(kategoria); 
     
     try {
       if (myRepertoire.includes(kategoria)) {
-        console.log("Törlés indítása kategóriára:", kategoria);
-        
         const { error } = await supabase
           .from('user_repertoires')
           .delete()
@@ -68,10 +65,7 @@ export default function Courses({ onBack, session, isAdmin, settings }) {
         if (error) throw error;
 
         setMyRepertoire(prev => prev.filter(k => k !== kategoria));
-        console.log("Sikeres törlés");
       } else {
-        console.log("Hozzáadás indítása kategóriára:", kategoria);
-        
         const { error } = await supabase
           .from('user_repertoires')
           .insert([{ user_id: session.user.id, kategoria: kategoria }]);
@@ -79,7 +73,6 @@ export default function Courses({ onBack, session, isAdmin, settings }) {
         if (error) throw error;
 
         setMyRepertoire(prev => [...prev, kategoria]);
-        console.log("Sikeres hozzáadás");
       }
     } catch (error) {
       console.error("Adatbázis hiba:", error);
@@ -89,12 +82,13 @@ export default function Courses({ onBack, session, isAdmin, settings }) {
     }
   }
 
-  function onSearchDrop(source, target) {
+  // JAVÍTOTT LÉPÉSMOTOR AZ INTERACTIVE BOARDHOZ
+  function handleSearchMoveAttempt(source, target) {
     const gameCopy = new Chess(searchGame.fen());
     let move = null;
     try { 
       move = gameCopy.move({ from: source, to: target, promotion: 'q' }); 
-    } catch(e) {}
+    } catch(e) { return false; }
     
     if (move) {
       setSearchGame(gameCopy);
@@ -269,6 +263,7 @@ export default function Courses({ onBack, session, isAdmin, settings }) {
             </div>
           </div>
 
+          {/* LÉPÉS ALAPÚ KERESŐ TÁBLA */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' }}>
             <h4 style={{ margin: 0, color: 'var(--text-dark)', fontSize: '0.9rem', textAlign: 'center' }}>
               {t.searchByMovesTitle || (lang === 'en' ? 'Search by moves' : 'Lépés alapú keresés')}<br/>
@@ -300,15 +295,12 @@ export default function Courses({ onBack, session, isAdmin, settings }) {
                 position: 'relative'
               }}
             >
-              <Chessboard 
-                id="search-board"
-                position={searchGame.fen()} 
-                onPieceDrop={onSearchDrop}
+              {/* ÚJ INTERACTIVE BOARD A KERESÉSHEZ */}
+              <InteractiveBoard 
+                game={searchGame}
                 boardOrientation={searchBoardOrientation}
-                customPieces={getCustomPieces(settings?.pieceStyle)}
-                customDarkSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'blue']?.dark }}
-                customLightSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'blue']?.light }}
-                showBoardNotation={false}
+                settings={{...settings, showCoordinates: false}}
+                onMoveAttempt={handleSearchMoveAttempt}
               />
             </div>
             

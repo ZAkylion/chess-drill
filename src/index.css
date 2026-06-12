@@ -118,3 +118,8 @@ div[data-board] {
     height: 95vw !important; /* A tábla négyzet alakú maradjon */
   }
 }
+/* Húzás közbeni "markoló" kurzor kikényszerítése */
+body.is-dragging, 
+body.is-dragging * {
+  cursor: grabbing !important;
+}

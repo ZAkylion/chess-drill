@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Chess } from 'chess.js';
-import { Chessboard } from 'react-chessboard';
-import { supabase } from './supabaseClient';
-import { boardThemes, getCustomPieces } from './chessConfig';
+import { supabase, fetchAllRows } from './supabaseClient'; // Új lapozós letöltő
 import { translations } from './translations';
+import InteractiveBoard from './InteractiveBoard'; // A központi sakktáblánk
 
 export default function DrillEditor({ onBack, session, isAdmin, settings, importPayload, clearImportPayload }) {
   const [activeTab, setActiveTab] = useState('editor');
@@ -23,20 +22,16 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
   const [lépésIndex, setLépésIndex] = useState(0);
   const [history, setHistory] = useState([{ fen: new Chess().fen(), lastMove: null }]);
 
-  const [optionSquares, setOptionSquares] = useState({});
-  const [moveFrom, setMoveFrom] = useState(''); 
-
   const lang = settings?.language || 'hu';
   const t = translations[lang] || translations['hu'] || {};
-
-  const customPieces = useMemo(() => getCustomPieces(settings?.pieceStyle), [settings?.pieceStyle]);
 
   const editorArrows = useMemo(() => {
     if (lépésIndex < editLepesek.length) {
       const tempChess = new Chess(game.fen());
       try {
         const m = tempChess.move(editLepesek[lépésIndex]);
-        return m ? [[m.from, m.to]] : [];
+        // [from, to, szín] formátum az InteractiveBoardhoz
+        return m ? [[m.from, m.to, 'rgba(76, 175, 80, 0.8)']] : [];
       } catch (e) { return []; }
     }
     return [];
@@ -44,7 +39,6 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
 
   useEffect(() => { fetchList(); }, [session, isAdmin]);
 
-  // ÚJ, GOLYÓÁLLÓ AUTOMATIKUS FELDOLGOZÓ (Átugorja a szemetet)
   useEffect(() => {
     if (importPayload && importPayload.moves) {
       
@@ -57,7 +51,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
       let rawMoves = importPayload.moves;
       let cleaned = rawMoves.replace(/\{[^}]*\}/g, '').replace(/\([^)]*\)/g, '');
       cleaned = cleaned.replace(/\b\d+\s*\.{1,3}/g, ' '); 
-      cleaned = cleaned.replace(/[!?]/g, ''); // Kigyomláljuk az értékelő jeleket (pl. !?)
+      cleaned = cleaned.replace(/[!?]/g, '');
 
       let movesArray = cleaned.includes(',') ? cleaned.split(',') : cleaned.split(/\s+/);
       movesArray = movesArray.map(m => m.trim()).filter(move => move.length > 0);
@@ -73,7 +67,6 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
             validMoves.push(res.san);
             newHistory.push({ fen: tempGame.fen(), lastMove: { from: res.from, to: res.to } });
           } else {
-            // Ha rossz a lépés, de még egy jó sem volt, csak simán átugorjuk a fejlécet/szemetet!
             if (validMoves.length > 0) break;
           }
         } catch (e) { 
@@ -86,8 +79,6 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
         setGame(tempGame);
         setHistory(newHistory);
         setLépésIndex(newHistory.length - 1);
-        setOptionSquares({});
-        setMoveFrom('');
         alert(lang === 'en' ? `🤖 Auto-imported ${validMoves.length} moves!` : `🤖 A robot sikeresen kitöltött mindent és betöltött ${validMoves.length} lépést a táblára! Mentsd el!`);
       } else {
         alert(lang === 'en' ? `Error. Raw text: ${rawMoves}` : `Hiba: Még mindig nem találok érvényes lépést. Ezt kaptam a robottól:\n\n${rawMoves}`);
@@ -107,11 +98,16 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lépésIndex, history, activeTab]);
 
+  // JAVÍTOTT: Az 1000 soros limit megkerülése
   async function fetchList() {
-    const { data } = await supabase.from('variaciok').select('*');
-    if (data) {
-      const lathatoDrillek = isAdmin ? data : data.filter(drill => session && drill.user_id === session.user.id);
-      setDrillLista(lathatoDrillek);
+    try {
+      const data = await fetchAllRows('variaciok');
+      if (data) {
+        const lathatoDrillek = isAdmin ? data : data.filter(drill => session && drill.user_id === session.user.id);
+        setDrillLista(lathatoDrillek);
+      }
+    } catch (error) {
+      console.error("Hiba a listázásnál:", error);
     }
   }
 
@@ -136,8 +132,6 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
     setGame(tempGame);
     setHistory(newHistory);
     setLépésIndex(newHistory.length - 1);
-    setOptionSquares({});
-    setMoveFrom('');
     setActiveTab('editor'); 
   }
 
@@ -149,8 +143,6 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
     setImportText('');
     setHistory([{ fen: new Chess().fen(), lastMove: null }]); 
     setLépésIndex(0);
-    setOptionSquares({});
-    setMoveFrom('');
   }
 
   function handleAddVariationToChapter(courseName, chapterName) {
@@ -160,7 +152,6 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
     setActiveTab('editor');
   }
 
-  // A manuális importáló is megkapta a golyóálló algoritmust
   function handleSmartImport() {
     if (!importText.trim()) return;
     let cleaned = importText.replace(/\{[^}]*\}/g, '').replace(/\([^)]*\)/g, '');
@@ -192,8 +183,6 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
       setGame(tempGame);
       setHistory(newHistory);
       setLépésIndex(newHistory.length - 1);
-      setOptionSquares({});
-      setMoveFrom('');
       setImportText(''); 
       alert(lang === 'en' ? `Successfully imported ${validMoves.length} moves!` : `Sikeresen beolvasva ${validMoves.length} lépés!`);
     } else {
@@ -205,8 +194,6 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
     if (lépésIndex > 0) { 
       setLépésIndex(lépésIndex - 1); 
       setGame(new Chess(history[lépésIndex - 1].fen)); 
-      setOptionSquares({});
-      setMoveFrom('');
     } 
   }
   
@@ -214,88 +201,28 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
     if (lépésIndex < history.length - 1) { 
       setLépésIndex(lépésIndex + 1); 
       setGame(new Chess(history[lépésIndex + 1].fen)); 
-      setOptionSquares({});
-      setMoveFrom('');
     } 
   }
 
-  function getMoveOptions(square) {
-    if (settings?.showLegalMoves === false) return;
-    const moves = game.moves({ square, verbose: true });
-    if (moves.length === 0) {
-      setOptionSquares({});
-      return;
-    }
-    const newSquares = {};
-    moves.forEach((m) => {
-      const isCapture = game.get(m.to) && game.get(m.to).color !== game.get(square).color;
-      if (isCapture) {
-        newSquares[m.to] = { boxShadow: 'inset 0 0 0 6px rgba(0,0,0,.2)', borderRadius: '50%' };
-      } else {
-        newSquares[m.to] = { background: 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)', borderRadius: '50%' };
-      }
-    });
-    newSquares[square] = { background: 'rgba(255, 255, 51, 0.5)' };
-    setOptionSquares(newSquares);
-  }
-
-  function onPieceDragBegin(piece, sourceSquare) {
-    setMoveFrom(sourceSquare);
-    getMoveOptions(sourceSquare);
-  }
-
-  function onSquareClick(square) {
-    if (moveFrom === square) {
-      setMoveFrom('');
-      setOptionSquares({});
-      return;
-    }
-
-    if (moveFrom) {
-      const gameCopy = new Chess(game.fen());
-      const move = gameCopy.move({ from: moveFrom, to: square, promotion: 'q' });
-      if (move) {
-        onDrop(moveFrom, square);
-        return;
-      }
-      const piece = game.get(square);
-      if (piece && piece.color === game.turn()) {
-        setMoveFrom(square);
-        if (settings?.showLegalMoves !== false) getMoveOptions(square);
-      } else {
-        setMoveFrom('');
-        setOptionSquares({});
-      }
-    } else {
-      const piece = game.get(square);
-      if (piece && piece.color === game.turn()) {
-        setMoveFrom(square);
-        if (settings?.showLegalMoves !== false) getMoveOptions(square);
-      } else {
-        setOptionSquares({});
-      }
-    }
-  }
-
-  function onDrop(source, target) {
-    if (source === target) {
-      setMoveFrom(source);
-      if (settings?.showLegalMoves !== false) getMoveOptions(source);
-      return false;
-    }
-
-    setOptionSquares({});
-    setMoveFrom('');
+  // KÖZÖS LÉPÉSMOTOR AZ INTERACTIVE BOARDHOZ (A régi események törölve lettek!)
+  function handleMoveAttempt(source, target) {
     const gameCopy = new Chess(game.fen());
-    const move = gameCopy.move({ from: source, to: target, promotion: 'q' });
-    if (move) { 
+    let move = null;
+    try { 
+      move = gameCopy.move({ from: source, to: target, promotion: 'q' }); 
+    } catch(e) { 
+      return false; 
+    }
+    
+    if (move) {
       setGame(gameCopy); 
       setEditLepesek([...editLepesek.slice(0, lépésIndex), move.san]); 
       const updatedHistory = [...history.slice(0, lépésIndex + 1), { fen: gameCopy.fen(), lastMove: { from: move.from, to: move.to } }];
       setHistory(updatedHistory);
       setLépésIndex(updatedHistory.length - 1);
+      return true;
     }
-    return !!move;
+    return false;
   }
 
   async function saveDrill() {
@@ -358,9 +285,7 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
   const myChapters = [...new Set(currentCourseDrills.map(d => d.chapter).filter(Boolean))];
 
   const lastMove = history[lépésIndex]?.lastMove;
-  const moveSquares = lastMove ? { [lastMove.from]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' }, [lastMove.to]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
-  const clickSelectStyle = moveFrom ? { [moveFrom]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
-  const customSquareStyles = { ...moveSquares, ...optionSquares, ...clickSelectStyle };
+  const moveSquares = lastMove ? { [lastMove.from]: { backgroundColor: 'rgba(255, 255, 51, 0.4)' }, [lastMove.to]: { backgroundColor: 'rgba(255, 255, 51, 0.4)' } } : {};
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', minHeight: '100vh', padding: '40px 20px', boxSizing: 'border-box', width: '100%' }}>
@@ -445,19 +370,14 @@ export default function DrillEditor({ onBack, session, isAdmin, settings, import
             </div>
 
             <div style={{ maxWidth: '440px', margin: '0 auto', boxShadow: 'var(--shadow-md)', borderRadius: '4px', overflow: 'hidden' }}>
-              <Chessboard 
-                position={game.fen()} 
-                onPieceDrop={onDrop} 
-                onPieceDragBegin={onPieceDragBegin}
-                onSquareClick={onSquareClick}
-                boardOrientation={boardOrientation} 
-                customArrows={[...editorArrows]}
-                customArrowColor="rgba(76, 175, 80, 0.8)" 
-                customPieces={customPieces}
-                customDarkSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.dark }}
-                customLightSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.light }}
-                showBoardNotation={settings?.showCoordinates ?? true}
-                customSquareStyles={customSquareStyles}
+              {/* AZ ÚJ, PRÉMIUM INTELLIGENS SAKKTÁBLA */}
+              <InteractiveBoard 
+                game={game}
+                boardOrientation={boardOrientation}
+                settings={settings}
+                onMoveAttempt={handleMoveAttempt}
+                customSquareStyles={moveSquares}
+                customArrows={editorArrows}
               />
             </div>
 

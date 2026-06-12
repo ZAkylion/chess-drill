@@ -1,33 +1,33 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Chess } from 'chess.js';
-import { Chessboard } from 'react-chessboard';
-import { supabase } from './supabaseClient';
-import { boardThemes, getCustomPieces } from './chessConfig';
+import { supabase, fetchAllRows } from './supabaseClient'; // ÚJ: importáljuk a fetchAllRows-t
 import { translations } from './translations';
+import InteractiveBoard from './InteractiveBoard';
 
 export default function VariationExplorer({ onBack, settings }) {
   const [game, setGame] = useState(new Chess());
   const [history, setHistory] = useState([{ fen: new Chess().fen(), lastMove: null }]);
   const [lépésIndex, setLépésIndex] = useState(0);
   const [allVariations, setAllVariations] = useState([]);
-  const [optionSquares, setOptionSquares] = useState({});
-  const [moveFrom, setMoveFrom] = useState('');
-  
   const [boardOrientation, setBoardOrientation] = useState('white');
+
+  const [positionMap, setPositionMap] = useState({ map: {}, exact: {} });
+  const [isProcessing, setIsProcessing] = useState(false);
 
   const lang = settings?.language || 'hu';
   const t = translations[lang] || translations['hu'] || {};
 
-  const customPieces = useMemo(() => getCustomPieces(settings?.pieceStyle), [settings?.pieceStyle]);
-
+  // 1. KORLÁTLAN ADATLETÖLTÉS
   useEffect(() => {
     async function fetchAll() {
-      const { data } = await supabase.from('variaciok').select('*').eq('allapot', 'publikus');
+      // A régi supabase.from... hívás helyett az okos, lapozós letöltőt használjuk
+      const data = await fetchAllRows('variaciok', 'allapot', 'publikus');
       if (data) setAllVariations(data);
     }
     fetchAll();
   }, []);
 
+  // 2. BILLENTYŰZET NAVIGÁCIÓ
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === 'ArrowLeft') handlePrev();
@@ -37,7 +37,11 @@ export default function VariationExplorer({ onBack, settings }) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [lépésIndex, history]);
 
-  const positionMap = useMemo(() => {
+  // 3. ASZINKRON, SZELETELT FELDOLGOZÁS (Fagyás elkerülése)
+  useEffect(() => {
+    if (allVariations.length === 0) return;
+
+    setIsProcessing(true);
     const map = {};
     const exact = {};
 
@@ -46,37 +50,57 @@ export default function VariationExplorer({ onBack, settings }) {
       return boardOrientation === 'black' ? isBlack : !isBlack;
     });
 
-    filteredVariations.forEach(drill => {
-      const tempGame = new Chess();
-      const moves = drill.lepesek.split(',');
+    let index = 0;
+    const chunkSize = 30; // 30-as csomagokban dolgozzuk fel
 
-      let currentBaseFen = tempGame.fen().split(' ').slice(0, 4).join(' ');
+    function processChunk() {
+      const end = Math.min(index + chunkSize, filteredVariations.length);
+      
+      for (let i = index; i < end; i++) {
+        const drill = filteredVariations[i];
+        const tempGame = new Chess();
+        const moves = drill.lepesek.split(',');
+        let currentBaseFen = tempGame.fen().split(' ').slice(0, 4).join(' ');
 
-      moves.forEach((moveSan) => {
-        if (!map[currentBaseFen]) map[currentBaseFen] = {};
-        if (!map[currentBaseFen][moveSan]) map[currentBaseFen][moveSan] = { count: 0, authors: new Set() };
-        
-        map[currentBaseFen][moveSan].count++;
-        map[currentBaseFen][moveSan].authors.add(drill.szerzo_nev || t.defaultUser || 'Felhasználó');
+        moves.forEach((moveSan) => {
+          if (!map[currentBaseFen]) map[currentBaseFen] = {};
+          if (!map[currentBaseFen][moveSan]) map[currentBaseFen][moveSan] = { count: 0, authors: new Set() };
+          
+          map[currentBaseFen][moveSan].count++;
+          map[currentBaseFen][moveSan].authors.add(drill.szerzo_nev || t.defaultUser || 'Felhasználó');
 
-        try {
-          tempGame.move(moveSan);
-          currentBaseFen = tempGame.fen().split(' ').slice(0, 4).join(' ');
-        } catch (e) {
-          console.warn("Hibás lépés a variációban:", drill.nev, moveSan);
-        }
-      });
+          try {
+            tempGame.move(moveSan);
+            currentBaseFen = tempGame.fen().split(' ').slice(0, 4).join(' ');
+          } catch (e) {}
+        });
 
-      if (!exact[currentBaseFen]) exact[currentBaseFen] = [];
-      exact[currentBaseFen].push(drill);
-    });
+        if (!exact[currentBaseFen]) exact[currentBaseFen] = [];
+        exact[currentBaseFen].push(drill);
+      }
 
-    return { map, exact };
+      index = end;
+
+      if (index < filteredVariations.length) {
+        setTimeout(processChunk, 0); // Visszaadjuk az irányítást a böngészőnek
+      } else {
+        setPositionMap({ map, exact });
+        setIsProcessing(false); // Kész a betöltés!
+      }
+    }
+
+    processChunk();
+
+    return () => {
+      index = filteredVariations.length; 
+    };
   }, [allVariations, boardOrientation, t.defaultUser]);
 
+  // 4. ELÉRHETŐ LÉPÉSEK KINYERÉSE
   const elerhetoLepesek = useMemo(() => {
-    const currentBaseFen = game.fen().split(' ').slice(0, 4).join(' ');
+    if (isProcessing) return { options: [], exactMatches: [] }; 
 
+    const currentBaseFen = game.fen().split(' ').slice(0, 4).join(' ');
     const nextMovesData = positionMap.map[currentBaseFen] || {};
     const exactMatches = positionMap.exact[currentBaseFen] || [];
 
@@ -87,8 +111,9 @@ export default function VariationExplorer({ onBack, settings }) {
     })).sort((a, b) => b.count - a.count);
 
     return { options, exactMatches };
-  }, [positionMap, game.fen()]);
+  }, [positionMap, game.fen(), isProcessing]);
 
+  // 5. ZÖLD NYILAK SZÁMÍTÁSA A TÁBLÁRA
   const explorerArrows = useMemo(() => {
     const arrows = [];
     elerhetoLepesek.options.forEach(opt => {
@@ -96,119 +121,37 @@ export default function VariationExplorer({ onBack, settings }) {
       try {
         const move = tempGame.move(opt.san);
         if (move) {
-          arrows.push([move.from, move.to]);
+          arrows.push([move.from, move.to, 'rgba(76, 175, 80, 0.5)']);
         }
       } catch (e) {}
     });
     return arrows;
   }, [elerhetoLepesek, game.fen()]);
 
-  const [visibleArrows, setVisibleArrows] = useState([]);
-
-  useEffect(() => {
-    setVisibleArrows(explorerArrows);
-  }, [explorerArrows]);
-
-  function refreshArrows() {
-    setVisibleArrows([]);
-    setTimeout(() => setVisibleArrows(explorerArrows), 10);
-  }
-
-  function getMoveOptions(square) {
-    if (settings?.showLegalMoves === false) return;
-    const moves = game.moves({ square, verbose: true });
-    if (moves.length === 0) {
-      setOptionSquares({});
-      return;
-    }
-    const newSquares = {};
-    moves.forEach((m) => {
-      const isCapture = game.get(m.to) && game.get(m.to).color !== game.get(square).color;
-      if (isCapture) {
-        newSquares[m.to] = { boxShadow: 'inset 0 0 0 6px rgba(0,0,0,.2)', borderRadius: '50%' };
-      } else {
-        newSquares[m.to] = { background: 'radial-gradient(circle, rgba(0,0,0,.2) 25%, transparent 26%)', borderRadius: '50%' };
-      }
-    });
-    newSquares[square] = { background: 'rgba(255, 255, 51, 0.5)' };
-    setOptionSquares(newSquares);
-  }
-
-  function onPieceDragBegin(piece, sourceSquare) {
-    setMoveFrom(sourceSquare);
-    getMoveOptions(sourceSquare);
-  }
-
-  function onSquareClick(square) {
-    if (moveFrom === square) {
-      setMoveFrom('');
-      setOptionSquares({});
-      refreshArrows();
-      return;
-    }
-
-    if (moveFrom) {
-      const gameCopy = new Chess(game.fen());
-      let move = null;
-      try { move = gameCopy.move({ from: moveFrom, to: square, promotion: 'q' }); } catch(e) {}
-      
-      if (move) {
-        onDrop(moveFrom, square);
-        return;
-      }
-      
-      const piece = game.get(square);
-      if (piece && piece.color === game.turn()) {
-        setMoveFrom(square);
-        if (settings?.showLegalMoves !== false) getMoveOptions(square);
-        refreshArrows();
-      } else {
-        setMoveFrom('');
-        setOptionSquares({});
-        refreshArrows();
-      }
-    } else {
-      const piece = game.get(square);
-      if (piece && piece.color === game.turn()) {
-        setMoveFrom(square);
-        if (settings?.showLegalMoves !== false) getMoveOptions(square);
-      } else {
-        setOptionSquares({});
-      }
-    }
-  }
-
-  function onDrop(source, target) {
-    if (source === target) {
-      setMoveFrom(source);
-      if (settings?.showLegalMoves !== false) getMoveOptions(source);
-      refreshArrows();
-      return false;
-    }
-
-    setOptionSquares({});
-    setMoveFrom('');
+  // 6. LÉPÉSMOTOR
+  function handleMoveAttempt(source, target) {
     const gameCopy = new Chess(game.fen());
     let move = null;
-    try { move = gameCopy.move({ from: source, to: target, promotion: 'q' }); } catch(e) {}
+    try { 
+      move = gameCopy.move({ from: source, to: target, promotion: 'q' }); 
+    } catch(e) { 
+      return false; 
+    }
     
     if (move) {
       setGame(gameCopy);
       const newHistory = [...history.slice(0, lépésIndex + 1), { fen: gameCopy.fen(), lastMove: { from: move.from, to: move.to } }];
       setHistory(newHistory);
       setLépésIndex(newHistory.length - 1);
-    } else {
-      refreshArrows();
+      return true;
     }
-    return !!move;
+    return false;
   }
 
   function handlePrev() {
     if (lépésIndex > 0) {
       setLépésIndex(lépésIndex - 1);
       setGame(new Chess(history[lépésIndex - 1].fen));
-      setOptionSquares({});
-      setMoveFrom('');
     }
   }
 
@@ -216,8 +159,6 @@ export default function VariationExplorer({ onBack, settings }) {
     if (lépésIndex < history.length - 1) {
       setLépésIndex(lépésIndex + 1);
       setGame(new Chess(history[lépésIndex + 1].fen));
-      setOptionSquares({});
-      setMoveFrom('');
     }
   }
 
@@ -232,8 +173,6 @@ export default function VariationExplorer({ onBack, settings }) {
     setGame(tempGame);
     setHistory(newHistory);
     setLépésIndex(newHistory.length - 1);
-    setOptionSquares({});
-    setMoveFrom('');
   }
 
   function flipBoard() {
@@ -242,9 +181,10 @@ export default function VariationExplorer({ onBack, settings }) {
   }
 
   const lastMove = history[lépésIndex]?.lastMove;
-  const moveSquares = lastMove ? { [lastMove.from]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' }, [lastMove.to]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
-  const clickSelectStyle = moveFrom ? { [moveFrom]: { backgroundColor: 'rgba(255, 255, 51, 0.5)' } } : {};
-  const customSquareStyles = { ...moveSquares, ...optionSquares, ...clickSelectStyle };
+  const moveSquares = lastMove ? { 
+    [lastMove.from]: { backgroundColor: 'rgba(255, 255, 51, 0.4)' }, 
+    [lastMove.to]: { backgroundColor: 'rgba(255, 255, 51, 0.4)' } 
+  } : {};
 
   return (
     <div style={{ maxWidth: '1000px', margin: '40px auto', fontFamily: 'sans-serif' }}>
@@ -256,9 +196,7 @@ export default function VariationExplorer({ onBack, settings }) {
 
       <div style={{ display: 'flex', gap: '30px', flexWrap: 'wrap', justifyContent: 'center' }}>
         
-        {/* Sakktábla */}
         <div style={{ width: '500px' }}>
-          
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '10px' }}>
             <button 
               className="btn-outline" 
@@ -270,21 +208,16 @@ export default function VariationExplorer({ onBack, settings }) {
           </div>
 
           <div style={{ boxShadow: 'var(--shadow-md)', borderRadius: '4px', overflow: 'hidden' }}>
-            <Chessboard 
-              position={game.fen()} 
-              onPieceDrop={onDrop}
-              onPieceDragBegin={onPieceDragBegin}
-              onSquareClick={onSquareClick}
-              boardOrientation={boardOrientation} 
-              customPieces={customPieces}
-              customArrows={visibleArrows}
-              customArrowColor="rgba(76, 175, 80, 0.6)"
-              customDarkSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.dark }}
-              customLightSquareStyle={{ backgroundColor: boardThemes[settings?.boardTheme || 'classic']?.light }}
-              showBoardNotation={settings?.showCoordinates ?? true}
-              customSquareStyles={customSquareStyles}
+            <InteractiveBoard 
+              game={game}
+              boardOrientation={boardOrientation}
+              settings={settings}
+              onMoveAttempt={handleMoveAttempt}
+              customSquareStyles={moveSquares}
+              customArrows={explorerArrows}
             />
           </div>
+
           <div style={{ marginTop: '20px', display: 'flex', justifyContent: 'center', gap: '15px' }}>
             <button className="btn-outline" onClick={handlePrev} disabled={lépésIndex === 0} style={{ opacity: lépésIndex === 0 ? 0.5 : 1 }}>◀️</button>
             <button className="btn-outline" onClick={handleNext} disabled={lépésIndex === history.length - 1} style={{ opacity: lépésIndex === history.length - 1 ? 0.5 : 1 }}>▶️</button>
@@ -292,7 +225,6 @@ export default function VariationExplorer({ onBack, settings }) {
           </div>
         </div>
 
-        {/* Lépések / Változatok listája */}
         <div className="card" style={{ width: '400px', alignSelf: 'flex-start', maxHeight: '550px', overflowY: 'auto' }}>
           <h3 style={{ marginTop: 0, color: 'var(--primary-blue)', borderBottom: '2px solid #eee', paddingBottom: '10px', display: 'flex', justifyContent: 'space-between' }}>
             <span>{t.availableMoves || 'Elérhető Lépések'}</span>
@@ -301,7 +233,12 @@ export default function VariationExplorer({ onBack, settings }) {
             </span>
           </h3>
 
-          {elerhetoLepesek.options.length === 0 && elerhetoLepesek.exactMatches.length === 0 ? (
+          {isProcessing ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--primary-blue)' }}>
+              <div className="spinner" style={{ margin: '0 auto 10px auto', width: '30px', height: '30px', border: '3px solid rgba(59, 130, 246, 0.2)', borderTopColor: 'var(--primary-blue)', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+              <p>Repertoár feldolgozása...</p>
+            </div>
+          ) : elerhetoLepesek.options.length === 0 && elerhetoLepesek.exactMatches.length === 0 ? (
             <p style={{ color: 'var(--text-light)', textAlign: 'center', marginTop: '20px' }}>{t.noDataExplorer || 'Nincs adat ebből az állásból.'}</p>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
@@ -342,7 +279,7 @@ export default function VariationExplorer({ onBack, settings }) {
             </table>
           )}
 
-          {elerhetoLepesek.exactMatches.length > 0 && (
+          {!isProcessing && elerhetoLepesek.exactMatches.length > 0 && (
             <div style={{ marginTop: '20px' }}>
               <h4 style={{ color: '#059669', marginBottom: '10px' }}>✅ Ide kifutó teljes variációk:</h4>
               {elerhetoLepesek.exactMatches.map((drill, i) => (
