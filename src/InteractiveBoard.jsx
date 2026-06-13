@@ -8,6 +8,7 @@ export default function InteractiveBoard({
   boardOrientation = 'white',
   settings,
   isBotMoving = false,
+  playBothSides = false,
   onMoveAttempt,
   wrongMoveSquare = null,
   hintMove = null,
@@ -268,7 +269,8 @@ export default function InteractiveBoard({
         }
       }
 
-      if (piece && piece.color === playerColor) {
+      const isPieceMovable = playBothSides ? piece.color === game.turn() : piece.color === playerColor;
+      if (piece && isPieceMovable) {
         if (!wasSelected) { setMoveFrom(square); getMoveOptions(square); }
         try { boardRef.current.setPointerCapture(e.pointerId); } catch(err) {}
         setDragState({
