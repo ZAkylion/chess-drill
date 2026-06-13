@@ -74,9 +74,19 @@ export default function DrillGame({ drill, settings, onComplete, onBack, current
     // Ellenőrizzük, hogy a helyes lépést húzta-e a repertoár szerint
     if (move.san !== drillLépések[lépésIndex]) {
       setHibák(prev => prev + 1);
-      setWrongMoveSquare(target);
-      setTimeout(() => setWrongMoveSquare(null), 600);
-      return false; // Visszaadja a boardnak, hogy sikertelen volt -> kijelölve marad
+      
+      // JAVÍTÁS: Átmenetileg felrakjuk a táblára a rossz lépést, hogy a játékos vizuálisan is lássa a hibát!
+      setGame(gameCopy);
+      setWrongMoveSquare(target); // Ezt az InteractiveBoard pirosra festi
+      
+      setTimeout(() => {
+        // 600ms után visszatekerjük az időt az eredeti, helyes állásra
+        setGame(new Chess(history[lépésIndex].fen));
+        setWrongMoveSquare(null);
+      }, 600);
+      
+      // Igazzal térünk vissza, hogy az InteractiveBoard simán odategye a bábut, és elkerüljük a "vibráló" rángatást!
+      return true; 
     }
 
     // Sikeres, jó lépés

@@ -22,7 +22,7 @@ export default function InteractiveBoard({
   const [rightClickedSquares, setRightClickedSquares] = useState({});
   const [preMove, setPreMove] = useState(null);
 
-  const [boardAnimDuration, setBoardAnimDuration] = useState(200);
+  const [boardAnimDuration, setBoardAnimDuration] = useState(300);
 
   const [dragState, setDragState] = useState({
     isDragging: false,
@@ -42,8 +42,17 @@ export default function InteractiveBoard({
 
   const playerColor = boardOrientation === 'black' ? 'b' : 'w';
 
+  // JAVÍTÁS: Amikor a bot lép, a game() fen-je megváltozik. Viszont ha a játékos 
+  // már a kezében tart egy bábut (moveFrom !== ''), akkor annak a kijelölését
+  // és a lehetséges lépéseinek (pöttyök) mutatásáát NEM SZABAD TÖRÖLNI!
   useEffect(() => {
-    setMoveFrom(''); setOptionSquares({}); setRightClickedSquares({}); setPreMove(null);
+    setRightClickedSquares({}); 
+    setPreMove(null);
+    // Csak akkor töröljük a pöttyöket és a kijelölést, ha épp NINCS bábu a kezünkben!
+    if (!dragState.isDragging && !moveFrom) {
+       setMoveFrom(''); 
+       setOptionSquares({}); 
+    }
   }, [game, isBotMoving]);
 
   useEffect(() => {
@@ -111,6 +120,14 @@ export default function InteractiveBoard({
     setOptionSquares(newSquares);
   };
 
+  // JAVÍTÁS: Ha a game változott (pl. lépett a bot), DE a játékos kezében
+  // van egy bábu, frissítsük a pöttyöket az új táblaállás alapján!
+  useEffect(() => {
+     if (moveFrom) {
+       getMoveOptions(moveFrom);
+     }
+  }, [game.fen(), isBotMoving]);
+
   const getSquareFromCoords = (clientX, clientY) => {
     if (!boardRef.current) return null;
     const rect = boardRef.current.getBoundingClientRect();
@@ -165,7 +182,7 @@ export default function InteractiveBoard({
           resetDragState(); 
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
-              setBoardAnimDuration(200);
+              setBoardAnimDuration(300);
             });
           });
         }, 50); // <-- Ez az az idő, ami alatt a sakktábla belső DOM-ja is biztosan betölt a helyére
@@ -177,7 +194,7 @@ export default function InteractiveBoard({
   useEffect(() => {
     let timer;
     if (dragState.isSuccessDrop) {
-      timer = setTimeout(() => { resetDragState(); setBoardAnimDuration(200); }, 500); 
+      timer = setTimeout(() => { resetDragState(); setBoardAnimDuration(300); }, 500); 
     }
     return () => clearTimeout(timer);
   }, [dragState.isSuccessDrop]);
@@ -186,12 +203,14 @@ export default function InteractiveBoard({
     if (dragState.hasMoved) {
       setBoardAnimDuration(0);
     } else {
-      const t = setTimeout(() => setBoardAnimDuration(200), 50);
+      const t = setTimeout(() => setBoardAnimDuration(300), 50);
       return () => clearTimeout(t);
     }
   }, [dragState.hasMoved]);
 
   const triggerSnapback = (source) => {
+    setMoveFrom(source); // JAVÍTÁS: Azonnal kijelöljük a bábut!
+    getMoveOptions(source); // JAVÍTÁS: Azonnal mutatjuk a lehetséges lépéseket!
     const coords = getCoordsFromSquare(source);
     if (coords) {
       setDragState(prev => ({ ...prev, x: coords.x, y: coords.y, isSnappingBack: true }));
@@ -200,8 +219,6 @@ export default function InteractiveBoard({
           if (!prev.isSnappingBack) return prev;
           return { ...prev, isSnappingBack: false, isRestoring: true };
         });
-        setMoveFrom(source); 
-        getMoveOptions(source); 
 
         setTimeout(() => {
           setDragState(prev => prev.isRestoring ? { ...prev, isDragging: false, isRestoring: false, piece: null, source: null, x: 0, y: 0, startX: 0, startY: 0, hasMoved: false, wasSelected: false, pointerId: null } : prev);
@@ -209,12 +226,12 @@ export default function InteractiveBoard({
 
       }, 150);
     } else {
-      resetDragState(); setMoveFrom(source); getMoveOptions(source);
+      resetDragState();
     }
   };
 
   const handlePointerDown = (e) => {
-    if (dragState.isDragging && !dragState.isRestoring) return;
+    if (dragState.isDragging && !dragState.isRestoring && !dragState.isSnappingBack) return;
 
     if (e.button === 2) { 
       const square = getSquareFromCoords(e.clientX, e.clientY);
@@ -244,7 +261,9 @@ export default function InteractiveBoard({
         }
 
         if (isTargetValid) {
+          setBoardAnimDuration(300); // JAVÍTÁS: Bekapcsoljuk az animációt a kattintásos lépéshez!
           handleCommitMove(moveFrom, square);
+          resetDragState(); // Eltüntetjük a levegőben lévő bábut
           return;
         }
       }

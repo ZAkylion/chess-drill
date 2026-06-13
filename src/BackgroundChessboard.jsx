@@ -10,24 +10,50 @@ export default function BackgroundChessboard() {
   const [currentMoveIndex, setCurrentMoveIndex] = useState(0);
   const [currentOpening, setCurrentOpening] = useState(null);
   const [orientation, setOrientation] = useState('white'); 
-  const { showChessboard } = useWindowSize(); // Behozzuk a láthatósági szabályt
+  const { showChessboard } = useWindowSize();
 
   useEffect(() => {
-    // Ha úgyse látszik a tábla, ne is terheljük az adatbázist a lekérdezéssel
     if (!showChessboard) return;
 
     async function fetchDrills() {
       try {
-        const { data, error } = await supabase.from('variaciok').select('*').limit(50); 
-        if (error) return;
+        // 1. Lekérjük a bejelentkezett felhasználót
+        const { data: { session } } = await supabase.auth.getSession();
+        let finalData = [];
 
-        if (data && data.length > 0) {
-          const formattedOpenings = data.map((drill) => {
+        // 2. Ha be van jelentkezve, lekérjük a saját repertoárját
+        if (session) {
+          const { data: repData } = await supabase.from('user_repertoires').select('kategoria').eq('user_id', session.user.id);
+          
+          if (repData && repData.length > 0) {
+            const categories = repData.map(r => r.kategoria);
+            // Kikeressük azokat a variációkat, amik benne vannak a felhasználó repertoár kategóriáiban
+            const { data, error } = await supabase.from('variaciok').select('*').in('kategoria', categories);
+            if (!error && data) {
+              finalData = data;
+            }
+          }
+        }
+
+        // 3. Ha nincs bejelentkezve, vagy teljesen üres a repertoárja, akkor alapértelmezett publikusakat húzunk be
+        if (finalData.length === 0) {
+           const { data, error } = await supabase.from('variaciok').select('*').eq('allapot', 'publikus').limit(100);
+           if (!error && data) {
+             finalData = data;
+           }
+        }
+
+        // 4. Formázzuk a kapott adatokat a tábla számára
+        if (finalData && finalData.length > 0) {
+          const formattedOpenings = finalData.map((drill) => {
             let moveList = [];
             if (drill.lepesek && typeof drill.lepesek === 'string') {
                 moveList = drill.lepesek.split(',').map(m => m.trim()).filter(m => m !== '');
             }
-            const variationSide = (moveList.length % 2 === 1) ? 'white' : 'black';
+            // Okosabb színfelismerés a drill neve alapján (mint a többi komponensnél)
+            const isBlack = drill.nev && drill.nev.toLowerCase().includes('black');
+            const variationSide = isBlack ? 'black' : 'white';
+            
             return { moves: moveList, color: variationSide };
           }).filter(op => op.moves.length > 0); 
 
@@ -36,8 +62,11 @@ export default function BackgroundChessboard() {
             pickRandomOpening(formattedOpenings);
           }
         }
-      } catch (error) {}
+      } catch (error) {
+        console.error("Háttér sakktábla hiba:", error);
+      }
     }
+    
     fetchDrills();
   }, [showChessboard]);
 
@@ -76,7 +105,6 @@ export default function BackgroundChessboard() {
     return () => clearInterval(moveInterval);
   }, [game, currentMoveIndex, currentOpening, openings, showChessboard]);
 
-  // HA A KÉPERNYŐ TÚL KICSI, ELTÜNTETJÜK A SAKKTÁBLÁT!
   if (!showChessboard) return null;
 
   return (
