@@ -3,13 +3,20 @@ import { Chess } from 'chess.js';
 import { supabase, fetchAllRows } from './supabaseClient';
 import { translations } from './translations';
 import InteractiveBoard from './InteractiveBoard';
+import useResponsive from './useResponsive';
 
-export default function VariationExplorer({ onBack, settings }) {
+export default function VariationExplorer({ onBack, settings, onEditVariation }) {
+  const { isMobile, isTablet } = useResponsive();
+
   const [game, setGame] = useState(new Chess());
   const [history, setHistory] = useState([{ fen: new Chess().fen(), lastMove: null, moveSan: '' }]);
   const [lépésIndex, setLépésIndex] = useState(0);
   const [allVariations, setAllVariations] = useState([]);
   const [boardOrientation, setBoardOrientation] = useState('white');
+  
+  const [filterMode, setFilterMode] = useState('all');
+  const [userCategories, setUserCategories] = useState([]);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   const [positionMap, setPositionMap] = useState({ map: {}, exact: {} });
   const [isProcessing, setIsProcessing] = useState(false);
@@ -23,6 +30,20 @@ export default function VariationExplorer({ onBack, settings }) {
       if (data) setAllVariations(data);
     }
     fetchAll();
+  }, []);
+
+  useEffect(() => {
+    async function fetchUserRepertoire() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setCurrentUserId(session.user.id);
+        const { data: repData } = await supabase.from('user_repertoires').select('kategoria').eq('user_id', session.user.id);
+        if (repData) {
+          setUserCategories(repData.map(r => r.kategoria));
+        }
+      }
+    }
+    fetchUserRepertoire();
   }, []);
 
   useEffect(() => {
@@ -43,7 +64,15 @@ export default function VariationExplorer({ onBack, settings }) {
 
     const filteredVariations = allVariations.filter(drill => {
       const isBlack = drill.nev && drill.nev.toLowerCase().includes('black');
-      return boardOrientation === 'black' ? isBlack : !isBlack;
+      const colorMatch = boardOrientation === 'black' ? isBlack : !isBlack;
+      
+      let repertoireMatch = true;
+      if (filterMode === 'repertoire') {
+        const courseName = drill.kategoria || drill.kurzus_nev || drill.kurzus || drill.kategoriak || 'Egyéb';
+        repertoireMatch = userCategories.includes(courseName);
+      }
+
+      return colorMatch && repertoireMatch;
     });
 
     let index = 0;
@@ -96,7 +125,7 @@ export default function VariationExplorer({ onBack, settings }) {
     return () => {
       index = filteredVariations.length; 
     };
-  }, [allVariations, boardOrientation, t.defaultUser]);
+  }, [allVariations, boardOrientation, t.defaultUser, filterMode, userCategories]);
 
   const elerhetoLepesek = useMemo(() => {
     if (isProcessing) return { options: [], exactMatches: [], totalMoves: 0, courses: [] }; 
@@ -273,11 +302,48 @@ export default function VariationExplorer({ onBack, settings }) {
         <div style={{ width: '80px', flexShrink: 0, display: 'flex' }}></div>
       </div>
 
-      <div style={{ display: 'flex', gap: '25px', flexWrap: 'wrap', justifyContent: 'center', width: '100%', maxWidth: '1000px', padding: '0 20px', paddingBottom: '40px' }}>
+      {/* KÜLÖNÁLLÓ SÁV: FORRÁS SZŰRŐ */}
+      <div style={{ width: '100%', maxWidth: '1000px', padding: '0 20px', marginBottom: '20px', display: 'flex', justifyContent: 'center' }}>
+        <div className="card" style={{ padding: '8px 15px', background: 'var(--white)', display: 'flex', gap: '15px', alignItems: 'center', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <span style={{ fontWeight: 'bold', fontSize: '14px', color: 'var(--text-dark)' }}>Forrás:</span>
+          <div style={{ display: 'flex', gap: '5px', background: '#F3F4F6', padding: '4px', borderRadius: '8px' }}>
+            <button 
+              onClick={() => setFilterMode('all')}
+              style={{ padding: '6px 12px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: '0.2s', background: filterMode === 'all' ? 'var(--white)' : 'transparent', color: filterMode === 'all' ? 'var(--primary-blue)' : 'var(--text-light)', boxShadow: filterMode === 'all' ? 'var(--shadow-sm)' : 'none' }}
+            >
+              🌐 Összes
+            </button>
+            <button 
+              onClick={() => setFilterMode('repertoire')}
+              style={{ padding: '6px 12px', border: 'none', borderRadius: '6px', fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: '0.2s', background: filterMode === 'repertoire' ? 'var(--white)' : 'transparent', color: filterMode === 'repertoire' ? 'var(--primary-blue)' : 'var(--text-light)', boxShadow: filterMode === 'repertoire' ? 'var(--shadow-sm)' : 'none' }}
+            >
+              🎯 Saját Repertoár
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* FŐ TARTALOM: A isMobile / isTablet hookok alapján intelligensen rendeződik */}
+      <div style={{ 
+        display: 'flex', 
+        gap: '25px', 
+        flexDirection: isMobile || isTablet ? 'column' : 'row',
+        alignItems: isMobile || isTablet ? 'center' : 'flex-start',
+        justifyContent: 'center', 
+        width: '100%', 
+        maxWidth: '1000px', 
+        padding: '0 20px', 
+        paddingBottom: '40px' 
+      }}>
         
-        {/* BAL OLDAL: SAKKTÁBLA KÁRTYA */}
-        <div style={{ width: 'min(100%, 55vh)', maxWidth: '500px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
-          
+        {/* BAL OLDAL: SAKKTÁBLA KÁRTYA ÉS GOMBOK */}
+        <div style={{ 
+          width: '100%', 
+          maxWidth: isMobile || isTablet ? 'min(100%, 65vh)' : '500px', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '15px' 
+        }}>
           <div className="card" style={{ padding: '8px', background: 'var(--white)' }}>
             <div style={{ borderRadius: '6px', overflow: 'hidden' }}>
               <InteractiveBoard 
@@ -292,70 +358,73 @@ export default function VariationExplorer({ onBack, settings }) {
             </div>
           </div>
 
-          {/* VEZÉRLŐK - CSS GRID MEGOLDÁS (GARANTÁLT 2x2 MOBILON) */}
-          <style>{`
-            .explorer-controls-grid {
-              display: grid;
-              grid-template-columns: repeat(4, 1fr);
-              gap: 10px;
-              padding: 12px;
-              background: var(--white);
-              border-radius: 8px;
-              width: 100%;
-              box-sizing: border-box;
-            }
-            .explorer-btn {
-              display: flex;
-              justify-content: center;
-              align-items: center;
-              gap: 5px;
-              padding: 12px 5px;
-              font-size: 14px;
-              min-width: 0;
-            }
-            .btn-icon {
-              font-size: 16px;
-              flex-shrink: 0;
-            }
-            .btn-text {
-              overflow: hidden;
-              text-overflow: ellipsis;
-              white-space: nowrap;
-            }
+          {/* VEZÉRLŐK - Kifinomult CSS Rács az összecsúszás ellen (Hozzáadva: minWidth: 0) */}
+          <div className="card" style={{ 
+            padding: '12px', background: 'var(--white)', 
+            display: 'grid', 
+            gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', 
+            gap: '10px' 
+          }}>
+            <button 
+              className="btn-outline" 
+              onClick={handlePrev} 
+              disabled={lépésIndex === 0} 
+              style={{ minWidth: 0, padding: '10px 5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', overflow: 'hidden', opacity: lépésIndex === 0 ? 0.5 : 1 }}
+            >
+              <span style={{ fontSize: '16px', flexShrink: 0 }}>◀️</span> 
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '13px' }}>{t.prevBtn || 'Vissza'}</span>
+            </button>
             
-            /* Mobilon szigorúan 2 oszlopos rács */
-            @media (max-width: 600px) {
-              .explorer-controls-grid {
-                grid-template-columns: 1fr 1fr;
-              }
-            }
-          `}</style>
-          <div className="card explorer-controls-grid">
-            <button className="btn-outline explorer-btn" onClick={() => loadVariation('')} title="Kezdőállás">
-              <span className="btn-icon">⏮️</span> <span className="btn-text">Start</span>
+            <button 
+              className="btn-outline" 
+              onClick={handleNext} 
+              disabled={lépésIndex === history.length - 1} 
+              style={{ minWidth: 0, padding: '10px 5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', overflow: 'hidden', opacity: lépésIndex === history.length - 1 ? 0.5 : 1 }}
+            >
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '13px' }}>{t.nextBtn || 'Előre'}</span> 
+              <span style={{ fontSize: '16px', flexShrink: 0 }}>▶️</span>
             </button>
-            <button className="btn-outline explorer-btn" onClick={handlePrev} disabled={lépésIndex === 0} style={{ opacity: lépésIndex === 0 ? 0.5 : 1 }}>
-              <span className="btn-icon">◀️</span> <span className="btn-text">{t.prevBtn || 'Vissza'}</span>
+            
+            <button 
+              className="btn-outline" 
+              onClick={() => loadVariation('')} 
+              title="Kezdőállás"
+              style={{ minWidth: 0, padding: '10px 5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', overflow: 'hidden' }}
+            >
+              <span style={{ fontSize: '16px', flexShrink: 0 }}>⏮️</span> 
+              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '13px' }}>Start</span>
             </button>
-            <button className="btn-outline explorer-btn" onClick={handleNext} disabled={lépésIndex === history.length - 1} style={{ opacity: lépésIndex === history.length - 1 ? 0.5 : 1 }}>
-              <span className="btn-text">{t.nextBtn || 'Előre'}</span> <span className="btn-icon">▶️</span>
-            </button>
-            <button className="btn-outline explorer-btn" onClick={flipBoard} title="Tábla megfordítása">
-              <span className="btn-icon">🔄</span> <strong className="btn-text">{boardOrientation === 'white' ? '⚪' : '⚫'}</strong>
+            
+            <button 
+              className="btn-outline" 
+              onClick={flipBoard} 
+              title="Tábla megfordítása"
+              style={{ minWidth: 0, padding: '10px 5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', overflow: 'hidden' }}
+            >
+              <span style={{ fontSize: '16px', flexShrink: 0 }}>🔄</span> 
+              <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '13px' }}>{boardOrientation === 'white' ? '⚪' : '⚫'}</strong>
             </button>
           </div>
         </div>
 
-        {/* JOBB OLDAL: ADATOK KÁRTYÁJA */}
-        <div style={{ width: 'min(100%, 450px)', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+        {/* JOBB OLDAL: ADATOK KÁRTYÁJA ÉS LISTA */}
+        <div style={{ 
+          width: '100%', 
+          maxWidth: isMobile || isTablet ? 'min(100%, 65vh)' : '450px', 
+          display: 'flex', 
+          flexDirection: 'column', 
+          gap: '15px' 
+        }}>
           
+          
+
           {/* KENYÉRMORZSA (EDDIGI LÉPÉSEK) */}
           <div className="card" style={{ padding: '15px', background: 'var(--white)', minHeight: '60px', display: 'flex', alignItems: 'center' }}>
              {renderBreadcrumbs()}
           </div>
 
           {/* STATISZTIKA ÉS LÉPÉSEK */}
-          <div className="card" style={{ flex: 1, padding: '0', background: 'var(--white)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: '600px' }}>
+          <div className="card" style={{ flex: 1, padding: '0', background: 'var(--white)', overflow: 'hidden', display: 'flex', flexDirection: 'column', maxHeight: isMobile ? '400px' : '600px' }}>
             
             <div style={{ padding: '15px 20px', borderBottom: '1px solid #E5E7EB', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#F9FAFB' }}>
               <span style={{ fontWeight: 'bold', color: 'var(--text-dark)', fontSize: '15px' }}>{t.availableMoves || 'Lehetséges Folytatások'}</span>
@@ -443,12 +512,43 @@ export default function VariationExplorer({ onBack, settings }) {
                     <span>🏁</span> Célba ért variációk ({elerhetoLepesek.exactMatches.length})
                   </h4>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                    {elerhetoLepesek.exactMatches.map((drill, i) => (
-                      <div key={i} style={{ padding: '8px 12px', background: '#ECFDF5', borderRadius: '6px', border: '1px solid #A7F3D0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <strong style={{ color: '#065F46', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{drill.nev}</strong> 
-                        <span style={{ color: '#047857', fontSize: '11px', background: '#D1FAE5', padding: '2px 6px', borderRadius: '4px' }}>{drill.szerzo_nev || t.defaultUser || 'Szerző'}</span>
-                      </div>
-                    ))}
+                    {elerhetoLepesek.exactMatches.map((drill, i) => {
+                      const isOwner = currentUserId && (drill.user_id === currentUserId || drill.felhasznalo_id === currentUserId);
+                      const courseName = drill.kategoria || ''; 
+                      const chapterName = drill.chapter || drill.nev || '';
+                      const displayName = courseName ? `${courseName} - ${chapterName}` : chapterName;
+
+                      return (
+                        <div key={i} style={{ padding: '8px 12px', background: '#ECFDF5', borderRadius: '6px', border: '1px solid #A7F3D0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '10px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                            <strong style={{ color: '#065F46', fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={displayName}>
+                              {displayName}
+                            </strong> 
+                            <span style={{ color: '#047857', fontSize: '11px', opacity: 0.8 }}>{drill.szerzo_nev || t.defaultUser || 'Szerző'}</span>
+                          </div>
+                          
+                          {isOwner && (
+                            <button 
+                              onClick={() => {
+                                if (onEditVariation) {
+                                  onEditVariation(drill);
+                                } else {
+                                  window.location.href = `/?autoImport=true&moves=${encodeURIComponent(drill.lepesek)}&course=${encodeURIComponent(courseName)}&chapter=${encodeURIComponent(chapterName)}`;
+                                }
+                              }}
+                              style={{ 
+                                padding: '4px 8px', background: '#10B981', color: 'white', border: 'none', 
+                                borderRadius: '4px', fontSize: '12px', fontWeight: 'bold', cursor: 'pointer', flexShrink: 0,
+                                display: 'flex', alignItems: 'center', gap: '4px', boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)'
+                              }}
+                              title="Saját variáció módosítása"
+                            >
+                              <span>✏️</span> Módosítás
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
