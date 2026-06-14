@@ -287,10 +287,10 @@ export default function VariationExplorer({ onBack, settings, onEditVariation })
 
   return (
     <div style={{ 
-      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', 
+      position: 'fixed', top: 0, left: 0, width: '100%', height: '100vh', 
       background: 'linear-gradient(135deg, #F0F4F8 0%, #E2ECF6 100%)', 
       display: 'flex', flexDirection: 'column', alignItems: 'center', 
-      paddingTop: '3vh', overflowY: 'auto', zIndex: 1000, fontFamily: "'Inter', 'Segoe UI', sans-serif", boxSizing: 'border-box' 
+      paddingTop: '3vh', overflowY: 'auto', overflowX: 'hidden', zIndex: 1000, fontFamily: "'Inter', 'Segoe UI', sans-serif", boxSizing: 'border-box' 
     }}>
       {/* HEADER */}
       <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: '15px', width: '100%', maxWidth: '1000px', marginBottom: '20px', padding: '0 20px' }}>
@@ -358,52 +358,74 @@ export default function VariationExplorer({ onBack, settings, onEditVariation })
             </div>
           </div>
 
-          {/* VEZÉRLŐK - Kifinomult CSS Rács az összecsúszás ellen (Hozzáadva: minWidth: 0) */}
-          <div className="card" style={{ 
-            padding: '12px', background: 'var(--white)', 
-            display: 'grid', 
-            gridTemplateColumns: isMobile ? 'minmax(0, 1fr) minmax(0, 1fr)' : 'repeat(4, minmax(0, 1fr))', 
-            gap: '10px' 
-          }}>
-            <button 
-              className="btn-outline" 
-              onClick={handlePrev} 
-              disabled={lépésIndex === 0} 
-              style={{ minWidth: 0, padding: '10px 5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', overflow: 'hidden', opacity: lépésIndex === 0 ? 0.5 : 1 }}
-            >
-              <span style={{ fontSize: '16px', flexShrink: 0 }}>◀️</span> 
-              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '13px' }}>{t.prevBtn || 'Vissza'}</span>
-            </button>
-            
-            <button 
-              className="btn-outline" 
-              onClick={handleNext} 
-              disabled={lépésIndex === history.length - 1} 
-              style={{ minWidth: 0, padding: '10px 5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', overflow: 'hidden', opacity: lépésIndex === history.length - 1 ? 0.5 : 1 }}
-            >
-              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '13px' }}>{t.nextBtn || 'Előre'}</span> 
-              <span style={{ fontSize: '16px', flexShrink: 0 }}>▶️</span>
-            </button>
-            
-            <button 
-              className="btn-outline" 
-              onClick={() => loadVariation('')} 
-              title="Kezdőállás"
-              style={{ minWidth: 0, padding: '10px 5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', overflow: 'hidden' }}
-            >
-              <span style={{ fontSize: '16px', flexShrink: 0 }}>⏮️</span> 
-              <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '13px' }}>Start</span>
-            </button>
-            
-            <button 
-              className="btn-outline" 
-              onClick={flipBoard} 
-              title="Tábla megfordítása"
-              style={{ minWidth: 0, padding: '10px 5px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '5px', overflow: 'hidden' }}
-            >
-              <span style={{ fontSize: '16px', flexShrink: 0 }}>🔄</span> 
-              <strong style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontSize: '13px' }}>{boardOrientation === 'white' ? '⚪' : '⚫'}</strong>
-            </button>
+          {/* VEZÉRLŐK - OKOS CSS GRID (NEM CSÚSZIK ÖSSZE) */}
+          <style>{`
+            .explorer-controls-wrapper {
+              display: grid;
+              gap: 10px;
+              grid-template-columns: repeat(4, 1fr);
+            }
+            @media (max-width: 768px) {
+              .explorer-controls-wrapper {
+                grid-template-columns: 1fr 1fr;
+              }
+            }
+            .explorer-btn {
+              padding: 12px 5px;
+              display: flex;
+              justify-content: center;
+              align-items: center;
+              gap: 5px;
+              font-size: 14px;
+              text-align: center;
+              border-radius: 6px;
+            }
+            .explorer-btn-text {
+              white-space: nowrap;
+            }
+            @media (max-width: 400px) {
+              .explorer-btn-text {
+                font-size: 12px;
+              }
+            }
+          `}</style>
+          <div className="card" style={{ padding: '12px', background: 'var(--white)' }}>
+            <div className="explorer-controls-wrapper">
+              <button 
+                className="btn-outline explorer-btn" 
+                onClick={handlePrev} 
+                disabled={lépésIndex === 0} 
+                style={{ opacity: lépésIndex === 0 ? 0.5 : 1 }}
+              >
+                <span style={{ fontSize: '16px' }}>◀️</span> 
+                <span className="explorer-btn-text">{t.prevBtn || 'Vissza'}</span>
+              </button>
+              <button 
+                className="btn-outline explorer-btn" 
+                onClick={handleNext} 
+                disabled={lépésIndex === history.length - 1} 
+                style={{ opacity: lépésIndex === history.length - 1 ? 0.5 : 1 }}
+              >
+                <span className="explorer-btn-text">{t.nextBtn || 'Előre'}</span> 
+                <span style={{ fontSize: '16px' }}>▶️</span>
+              </button>
+              <button 
+                className="btn-outline explorer-btn" 
+                onClick={() => loadVariation('')} 
+                title="Kezdőállás"
+              >
+                <span style={{ fontSize: '16px' }}>⏮️</span> 
+                <span className="explorer-btn-text">Start</span>
+              </button>
+              <button 
+                className="btn-outline explorer-btn" 
+                onClick={flipBoard} 
+                title="Tábla megfordítása"
+              >
+                <span style={{ fontSize: '16px' }}>🔄</span> 
+                <strong className="explorer-btn-text">{boardOrientation === 'white' ? '⚪' : '⚫'}</strong>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -416,8 +438,6 @@ export default function VariationExplorer({ onBack, settings, onEditVariation })
           gap: '15px' 
         }}>
           
-          
-
           {/* KENYÉRMORZSA (EDDIGI LÉPÉSEK) */}
           <div className="card" style={{ padding: '15px', background: 'var(--white)', minHeight: '60px', display: 'flex', alignItems: 'center' }}>
              {renderBreadcrumbs()}
